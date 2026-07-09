@@ -41,4 +41,9 @@ uv run flake8 skyevents tests      # lint
 Tests run offline. Generator tests assert against known reference events
 with tolerances fixed in the plan's stage-0 spike; never fetch feeds or
 ephemerides from the network in tests (the ephemeris file in `data/` may
-be present locally, but CI has none).
+be present locally, but CI has none). `tests/conftest.py` points
+`SKYEVENTS_DATA` at `tests/data/`, which holds a committed jplephem
+excerpt of DE440s covering 2025–2030 (~0.7 MB) — keep generator test
+years inside that range. Regenerate with:
+`uv run python -m jplephem excerpt 2025/1/1 2030/12/31 data/de440s.bsp
+tests/data/de440s.bsp`.
