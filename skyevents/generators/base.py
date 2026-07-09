@@ -6,6 +6,8 @@ stage-0 spike was calibrated against.
 
 from functools import cache
 
+from skyfield.framelib import ecliptic_frame
+
 from skyevents.ephemeris import load_ephemeris, load_timescale
 
 PLANETS = ("mercury", "venus", "mars", "jupiter", "saturn",
@@ -38,6 +40,13 @@ class Context:
         """Half-open [Jan 1 UTC, Jan 1 UTC of the next year)"""
 
         return self.ts.utc(year, 1, 1), self.ts.utc(year + 1, 1, 1)
+
+    def ecliptic_lon(self, t, body) -> float:
+        """Apparent ecliptic longitude of date, degrees"""
+
+        pos = self.earth.at(t).observe(body).apparent()
+        _, lon, _ = pos.frame_latlon(ecliptic_frame)
+        return lon.degrees
 
     def separation(self, a, b, step_days: float):
         """Angular-separation-in-degrees function for skyfield.searchlib"""
