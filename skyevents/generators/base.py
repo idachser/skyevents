@@ -50,6 +50,22 @@ class Context:
         return f
 
 
+def dedupe_extrema(times, values, eps_days: float = 0.5):
+    """Collapse near-identical extremum times.
+
+    find_minima/find_maxima can converge onto the same extremum from
+    two adjacent samples and report it twice (seconds apart); keep the
+    first of each cluster.
+    """
+
+    out = []
+    for t, v in zip(times, values):
+        if out and t.tt - out[-1][0].tt < eps_days:
+            continue
+        out.append((t, v))
+    return out
+
+
 @cache
 def context() -> Context:
     return Context()
