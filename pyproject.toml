@@ -20,6 +20,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    # skyfield.searchlib vs numpy 2.5, not ours to fix
+    "ignore:Setting the dtype on a NumPy array has been deprecated:DeprecationWarning",
+]
 
 [build-system]
 requires = ["hatchling"]
