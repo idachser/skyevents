@@ -1,0 +1,95 @@
+"""HTTP API.
+
+Requests are served from the SQLite cache only; generation happens in
+the background. Responses carry an explicit `coverage` range — the part
+of the requested window actually backed by generated years — so that an
+empty window outside those years does not look like "no events".
+"""
+
+from datetime import date, datetime, time, timezone
+from typing import Literal
+
+from fastapi import FastAPI, HTTPException, Query
+
+from skyevents import store, texts
+from skyevents.generators import GENERATOR_VERSION
+from skyevents.model import Event, EventType
+
+MAX_WINDOW_DAYS = 400
+
+app = FastAPI(title="skyevents", version="1.0")
+
+
+def coverage_runs(years: list[int]):
+    """Contiguous cached-year runs as [start, end) UTC instants"""
+
+    runs = []
+    for year in sorted(years):
+        start = datetime(year, 1, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        if runs and runs[-1][1] == start:
+            runs[-1] = (runs[-1][0], end)
+        else:
+            runs.append((start, end))
+    return runs
+
+
+def serialize(event: Event, lang: str) -> dict:
+    summary, description = texts.render(event, lang)
+    return {
+        "uid": event.uid,
+        "type": event.type,
+        "dt_utc": event.dt_utc.isoformat(),
+        "bodies": event.bodies,
+        "params": event.params,
+        "summary": summary,
+        "description": description,
+        # links to in-the-sky.org left with the feed; a page of our
+        # own may fill this in the future
+        "url": "",
+    }
+
+
+@app.get("/v1/events")
+def events(
+    from_: date = Query(alias="from"),
+    to: date = Query(),
+    types: str | None = None,
+    lang: Literal["en", "ru"] = "en",
+):
+    """Events with from <= dt_utc < to (dates are UTC midnights)"""
+
+    if from_ > to:
+        raise HTTPException(422, "'from' must not be after 'to'")
+    if (to - from_).days > MAX_WINDOW_DAYS:
+        raise HTTPException(
+            422, f"window wider than {MAX_WINDOW_DAYS} days")
+    type_filter = None
+    if types is not None:
+        try:
+            type_filter = [EventType(t) for t in types.split(",")]
+        except ValueError:
+            raise HTTPException(422, f"unknown event type in {types!r}")
+
+    start = datetime.combine(from_, time.min, tzinfo=timezone.utc)
+    end = datetime.combine(to, time.min, tzinfo=timezone.utc)
+
+    conn = store.connect()
+    try:
+        years = store.cached_years(conn, GENERATOR_VERSION)
+        run = next((r for r in coverage_runs(years)
+                    if r[0] < end and start < r[1]), None)
+        if run is None:
+            return {"events": [], "coverage": None}
+        covered_start = max(start, run[0])
+        covered_end = min(end, run[1])
+        found = store.events_between(
+            conn, covered_start, covered_end, type_filter)
+    finally:
+        conn.close()
+
+    return {
+        "events": [serialize(e, lang) for e in found],
+        "coverage": {"from": covered_start.isoformat(),
+                     "to": covered_end.isoformat()},
+    }
