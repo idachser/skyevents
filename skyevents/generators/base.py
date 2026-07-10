@@ -9,9 +9,9 @@ from functools import cache
 from skyfield.framelib import ecliptic_frame
 
 from skyevents.ephemeris import load_ephemeris, load_timescale
+from skyevents.model import BODY_RANK
 
-PLANETS = ("mercury", "venus", "mars", "jupiter", "saturn",
-           "uranus", "neptune")
+PLANETS = tuple(b for b in BODY_RANK if b not in ("sun", "moon"))
 
 
 class Context:

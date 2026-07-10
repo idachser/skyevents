@@ -13,6 +13,20 @@ def test_make_uid_is_deterministic():
     assert uid == "close_approach:moon-venus:20260703"
 
 
+def test_uid_body_order_is_canonical():
+    """moon-venus and venus-moon must be one event, not two"""
+
+    assert make_uid(
+        EventType.CLOSE_APPROACH, ["venus", "moon"], DT
+    ) == make_uid(EventType.CLOSE_APPROACH, ["moon", "venus"], DT)
+
+
+def test_create_canonicalizes_bodies():
+    event = Event.create(EventType.CLOSE_APPROACH, DT, ["venus", "moon"])
+    assert event.bodies == ["moon", "venus"]
+    assert event.uid == "close_approach:moon-venus:20260703"
+
+
 def test_uid_ignores_time_of_day():
     """A refined peak instant must not change the event identity"""
 

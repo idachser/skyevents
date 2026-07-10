@@ -16,6 +16,19 @@ class EventType(StrEnum):
     METEOR_SHOWER = "meteor_shower"
 
 
+# canonical body order: Sun, Moon, planets outward; anything else
+# (stars, one day) after them alphabetically
+BODY_RANK = {name: rank for rank, name in enumerate(
+    ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn",
+     "uranus", "neptune"))}
+
+
+def canonical_bodies(bodies: list[str]) -> list[str]:
+    """Fixed body order so moon-venus and venus-moon share one uid"""
+
+    return sorted(bodies, key=lambda b: (BODY_RANK.get(b, len(BODY_RANK)), b))
+
+
 def make_uid(type: EventType, bodies: list[str], dt_utc: datetime) -> str:
     """Deterministic uid: stable across regenerations of the same event.
 
@@ -23,7 +36,8 @@ def make_uid(type: EventType, bodies: list[str], dt_utc: datetime) -> str:
     peak instant does not change the event's identity.
     """
 
-    return ":".join([type, "-".join(bodies), dt_utc.strftime("%Y%m%d")])
+    return ":".join([type, "-".join(canonical_bodies(bodies)),
+                     dt_utc.strftime("%Y%m%d")])
 
 
 class Event(BaseModel):
@@ -52,6 +66,6 @@ class Event(BaseModel):
             uid=make_uid(type, bodies, dt_utc),
             type=type,
             dt_utc=dt_utc,
-            bodies=bodies,
+            bodies=canonical_bodies(bodies),
             params=params or {},
         )
