@@ -50,6 +50,24 @@ def serialize(event: Event, lang: str) -> dict:
     }
 
 
+@app.get("/health")
+def health():
+    """Liveness for compose healthchecks and CI smoke tests.
+
+    Answers right after startup: an empty cache is reported, not
+    awaited (background generation can take minutes on first run).
+    """
+
+    conn = store.connect()
+    try:
+        years = store.cached_years(conn, GENERATOR_VERSION)
+    finally:
+        conn.close()
+    return {"status": "ok",
+            "generator_version": GENERATOR_VERSION,
+            "years": years}
+
+
 @app.get("/v1/events")
 def events(
     from_: date = Query(alias="from"),

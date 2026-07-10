@@ -38,6 +38,19 @@ def seed_2026(conn, version=GENERATOR_VERSION):
     return events
 
 
+def test_health_with_empty_cache(cache):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["years"] == []
+
+
+def test_health_reports_cached_years(cache):
+    seed_2026(cache)
+    assert client.get("/health").json()["years"] == [2026]
+
+
 def test_events_in_window(cache):
     seed_2026(cache)
     resp = client.get(
