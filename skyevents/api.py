@@ -6,18 +6,82 @@ of the requested window actually backed by generated years — so that an
 empty window outside those years does not look like "no events".
 """
 
+import asyncio
+import logging
+import os
+from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timezone
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
 
 from skyevents import store, texts
-from skyevents.generators import GENERATOR_VERSION
+from skyevents.generators import GENERATOR_VERSION, generate_year
 from skyevents.model import Event, EventType
 
 MAX_WINDOW_DAYS = 400
+REFRESH_INTERVAL_S = 6 * 3600
 
-app = FastAPI(title="skyevents", version="1.0")
+logger = logging.getLogger("skyevents")
+
+
+def needed_years(today: date) -> list[int]:
+    """Current year; plus the next one starting in December"""
+
+    years = [today.year]
+    if today.month == 12:
+        years.append(today.year + 1)
+    return years
+
+
+def generate_missing():
+    """Generate and cache the needed years not yet in the cache.
+
+    A version bump makes previously cached years "missing" again, so
+    changing generator logic regenerates the cache on next startup.
+    """
+
+    conn = store.connect()
+    try:
+        cached = set(store.cached_years(conn, GENERATOR_VERSION))
+        for year in needed_years(datetime.now(timezone.utc).date()):
+            if year in cached:
+                continue
+            logger.info("generating %d...", year)
+            events = generate_year(year)
+            store.replace_year(conn, year, GENERATOR_VERSION, events)
+            logger.info("cached %d: %d events", year, len(events))
+    finally:
+        conn.close()
+
+
+async def refresh_loop():
+    """Fill the cache in the background, forever.
+
+    Runs off the event loop thread: pairwise close-approach searches
+    can take minutes on the full ephemeris, and /health must answer
+    right after startup.
+    """
+
+    while True:
+        try:
+            await asyncio.to_thread(generate_missing)
+        except Exception:
+            logger.exception("cache generation failed")
+        await asyncio.sleep(REFRESH_INTERVAL_S)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    task = None
+    if os.environ.get("SKYEVENTS_AUTOGEN", "1") != "0":
+        task = asyncio.create_task(refresh_loop())
+    yield
+    if task is not None:
+        task.cancel()
+
+
+app = FastAPI(title="skyevents", version="1.0", lifespan=lifespan)
 
 
 def coverage_runs(years: list[int]):

@@ -38,6 +38,26 @@ def seed_2026(conn, version=GENERATOR_VERSION):
     return events
 
 
+def test_needed_years_regular_month():
+    from skyevents.api import needed_years
+    assert needed_years(datetime(2026, 7, 10).date()) == [2026]
+
+
+def test_needed_years_december_includes_next():
+    from skyevents.api import needed_years
+    assert needed_years(datetime(2026, 12, 1).date()) == [2026, 2027]
+
+
+def test_generate_missing_fills_cache(cache):
+    from skyevents.api import generate_missing
+    generate_missing()
+    years = store.cached_years(cache, GENERATOR_VERSION)
+    assert datetime.now(timezone.utc).year in years
+    # a second run is a no-op (already cached)
+    generate_missing()
+    assert store.cached_years(cache, GENERATOR_VERSION) == years
+
+
 def test_health_with_empty_cache(cache):
     resp = client.get("/health")
     assert resp.status_code == 200
