@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timezone
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 
 from skyevents import store, texts
 from skyevents.generators import GENERATOR_VERSION, generate_year
@@ -130,6 +130,52 @@ def health():
     return {"status": "ok",
             "generator_version": GENERATOR_VERSION,
             "years": years}
+
+
+def ics_escape(text: str) -> str:
+    return (text.replace("\\", "\\\\").replace(";", "\\;")
+            .replace(",", "\\,").replace("\n", "\\n"))
+
+
+@app.get("/v1/calendar.ics")
+def calendar_ics(year: int, lang: Literal["en", "ru"] = "en"):
+    """Yearly iCal, format-compatible with the in-the-sky.org feed.
+
+    Lets the bot switch data sources by swapping the feed URL before
+    it grows a real API client.
+    """
+
+    conn = store.connect()
+    try:
+        if year not in store.cached_years(conn, GENERATOR_VERSION):
+            raise HTTPException(
+                503, f"year {year} is not generated yet",
+                headers={"Retry-After": "600"})
+        found = store.events_between(
+            conn,
+            datetime(year, 1, 1, tzinfo=timezone.utc),
+            datetime(year + 1, 1, 1, tzinfo=timezone.utc))
+    finally:
+        conn.close()
+
+    now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
+             "PRODID:-//skyevents//EN"]
+    for event in found:
+        summary, description = texts.render(event, lang)
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{event.uid}",
+            f"DTSTAMP:{now}",
+            f"DTSTART:{event.dt_utc.strftime('%Y%m%dT%H%M%SZ')}",
+            f"SUMMARY:{ics_escape(summary)}",
+        ]
+        if description:
+            lines.append(f"DESCRIPTION:{ics_escape(description)}")
+        lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+    return Response("\r\n".join(lines) + "\r\n",
+                    media_type="text/calendar; charset=utf-8")
 
 
 @app.get("/v1/events")

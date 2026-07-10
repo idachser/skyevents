@@ -126,6 +126,26 @@ def test_stale_generator_version_is_not_coverage(cache):
     assert resp.json() == {"events": [], "coverage": None}
 
 
+def test_calendar_ics(cache):
+    seed_2026(cache)
+    resp = client.get("/v1/calendar.ics", params={"year": 2026})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/calendar")
+    text = resp.text
+    assert text.startswith("BEGIN:VCALENDAR\r\n")
+    assert "UID:moon_phase:moon:20260103" in text
+    assert "DTSTART:20260103T100200Z" in text
+    assert "SUMMARY:Full Moon" in text
+    assert text.count("BEGIN:VEVENT") == 2
+
+
+def test_calendar_ics_ungenerated_year_is_503(cache):
+    seed_2026(cache)
+    resp = client.get("/v1/calendar.ics", params={"year": 2030})
+    assert resp.status_code == 503
+    assert resp.headers["retry-after"]
+
+
 @pytest.mark.parametrize("params", [
     {"from": "2026-02-01", "to": "2026-01-01"},
     {"from": "2026-01-01", "to": "2027-06-01"},
