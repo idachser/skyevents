@@ -3,7 +3,10 @@ __pycache__/
 .venv/
 .pytest_cache/
 /data/
+feed/
+*.ics
+*.db
 *.bsp
-!tests/data/*.bsp
+!tests/data/de440s.bsp
 .env
 .claude/settings.local.json
