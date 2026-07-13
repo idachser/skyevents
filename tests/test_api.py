@@ -139,6 +139,32 @@ def test_calendar_ics(cache):
     assert text.count("BEGIN:VEVENT") == 2
 
 
+def test_ics_escape_normalizes_cr():
+    from skyevents.api import ics_escape
+    assert ics_escape("a\r\nb\rc") == "a\\nb\\nc"
+
+
+def test_ics_fold_75_octets():
+    from skyevents.api import ics_fold
+
+    assert ics_fold("short") == ["short"]
+
+    line = "SUMMARY:" + "я" * 100  # 2-octet characters
+    folded = ics_fold(line)
+    assert all(len(part.encode()) <= 75 for part in folded)
+    assert all(part.startswith(" ") for part in folded[1:])
+    # unfolding restores the original line
+    assert folded[0] + "".join(p[1:] for p in folded[1:]) == line
+
+
+def test_calendar_ics_lines_fit_75_octets(cache):
+    seed_2026(cache)
+    resp = client.get(
+        "/v1/calendar.ics", params={"year": 2026, "lang": "ru"})
+    for line in resp.text.split("\r\n"):
+        assert len(line.encode()) <= 75
+
+
 def test_calendar_ics_ungenerated_year_is_503(cache):
     seed_2026(cache)
     resp = client.get("/v1/calendar.ics", params={"year": 2030})

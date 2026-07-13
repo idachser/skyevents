@@ -134,7 +134,23 @@ def health():
 
 def ics_escape(text: str) -> str:
     return (text.replace("\\", "\\\\").replace(";", "\\;")
-            .replace(",", "\\,").replace("\n", "\\n"))
+            .replace(",", "\\,").replace("\r\n", "\n")
+            .replace("\r", "\n").replace("\n", "\\n"))
+
+
+def ics_fold(line: str) -> list[str]:
+    """RFC 5545 3.1 folding: content lines of at most 75 octets"""
+
+    out = []
+    octets = line.encode("utf-8")
+    while len(octets) > 75:
+        cut = 75
+        while octets[cut] & 0xC0 == 0x80:  # don't split a UTF-8 char
+            cut -= 1
+        out.append(octets[:cut].decode("utf-8"))
+        octets = b" " + octets[cut:]
+    out.append(octets.decode("utf-8"))
+    return out
 
 
 @app.get("/v1/calendar.ics")
@@ -174,7 +190,8 @@ def calendar_ics(year: int, lang: Literal["en", "ru"] = "en"):
             lines.append(f"DESCRIPTION:{ics_escape(description)}")
         lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")
-    return Response("\r\n".join(lines) + "\r\n",
+    folded = [part for line in lines for part in ics_fold(line)]
+    return Response("\r\n".join(folded) + "\r\n",
                     media_type="text/calendar; charset=utf-8")
 
 
