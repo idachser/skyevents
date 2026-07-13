@@ -17,7 +17,7 @@ jobs:
         run: uv sync
 
       - name: Lint
-        run: uv run flake8 skyevents tests
+        run: uv run ruff check skyevents tests
 
       - name: Tests
         run: uv run pytest

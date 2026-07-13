@@ -13,7 +13,7 @@ Built as the data source for [astro_bot](../astro_bot); see
 ```bash
 uv sync                      # deps (creates .venv)
 uv run pytest                # tests (offline)
-uv run flake8 skyevents tests
+uv run ruff check skyevents tests
 ```
 
 The DE440s ephemeris (~32 MB) is downloaded on first use into `data/`

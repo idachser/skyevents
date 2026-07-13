@@ -18,7 +18,7 @@ checkboxes up to date.
 ```bash
 uv sync                            # deps (creates .venv)
 uv run pytest                      # tests (offline — never download in tests)
-uv run flake8 skyevents tests      # lint
+uv run ruff check skyevents tests  # lint
 ```
 
 ## Architecture
