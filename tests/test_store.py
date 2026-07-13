@@ -10,6 +10,27 @@ def make_event(day: int, type=EventType.MOON_PHASE, params=None):
         ["moon"], params or {"phase": "full"})
 
 
+def test_connect_enables_wal(tmp_path):
+    conn = store.connect(str(tmp_path / "cache.db"))
+    assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
+def test_reads_are_not_blocked_by_a_writer(tmp_path):
+    path = str(tmp_path / "cache.db")
+    writer = store.connect(path)
+    reader = store.connect(path)
+    store.replace_year(writer, 2026, 1, [make_event(3)])
+
+    writer.execute("BEGIN IMMEDIATE")
+    writer.execute("DELETE FROM events WHERE year = 2026")
+    got = store.events_between(
+        reader,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        datetime(2027, 1, 1, tzinfo=timezone.utc))
+    writer.rollback()
+    assert [e.dt_utc.day for e in got] == [3]
+
+
 def test_round_trip(tmp_path):
     conn = store.connect(str(tmp_path / "cache.db"))
     events = [make_event(3), make_event(10)]

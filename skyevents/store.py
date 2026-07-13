@@ -41,7 +41,11 @@ def db_path() -> str:
 def connect(path: str | None = None) -> sqlite3.Connection:
     path = path or db_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=15)
+    # WAL: request threads keep reading while the background
+    # generator rewrites a year in one long transaction
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(SCHEMA)
     return conn
 
