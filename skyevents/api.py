@@ -37,8 +37,9 @@ def needed_years(today: date) -> list[int]:
 def generate_missing():
     """Generate and cache the needed years not yet in the cache.
 
-    A version bump makes previously cached years "missing" again, so
-    changing generator logic regenerates the cache on next startup.
+    A version bump makes the *needed* years "missing" again, so they
+    regenerate on next startup. Past years intentionally drop out of
+    coverage: the bot only announces upcoming events (see the plan).
     """
 
     conn = store.connect()
