@@ -25,7 +25,12 @@ def generate(year: int) -> list[Event]:
     ctx = context()
     t0, t1 = ctx.year_window(year)
 
-    times, phases = find_discrete(t0, t1, almanac.moon_phases(ctx.eph))
+    # a new moon just across the year boundary can still have its
+    # separation minimum inside this year, so search wider and assign
+    # each eclipse to the year containing the minimum
+    lo = ctx.ts.tt_jd(t0.tt - 2.0)
+    hi = ctx.ts.tt_jd(t1.tt + 2.0)
+    times, phases = find_discrete(lo, hi, almanac.moon_phases(ctx.eph))
     new_moons = [t for t, phase in zip(times, phases) if phase == 0]
 
     separation = ctx.separation(ctx.sun, ctx.moon, 0.05)
@@ -37,6 +42,8 @@ def generate(year: int) -> list[Event]:
         if len(t_min) == 0:
             continue
         t, sep = t_min[0], float(sep_min[0])
+        if not (t0.tt <= t.tt < t1.tt):
+            continue
 
         e = ctx.earth.at(t)
         d_sun = e.observe(ctx.sun).distance().km

@@ -38,3 +38,15 @@ def test_2027_known_eclipses():
               for e in events}
     assert by_day["2027-02-06"] == "annular"
     assert by_day["2027-08-02"] == "total"
+
+
+def test_year_boundary_no_misses_or_duplicates():
+    """The new-moon search is wider than the year; each eclipse must
+    land in exactly one year — the one containing the minimum."""
+
+    uids = []
+    for year in (2026, 2027, 2028):
+        events = solar_eclipses.generate(year)
+        assert all(e.dt_utc.year == year for e in events)
+        uids += [e.uid for e in events]
+    assert len(uids) == len(set(uids))
