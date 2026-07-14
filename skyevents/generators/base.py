@@ -41,6 +41,21 @@ class Context:
 
         return self.ts.utc(year, 1, 1), self.ts.utc(year + 1, 1, 1)
 
+    def padded_window(self, year: int, pad_days: float):
+        """year_window widened by pad_days, clamped to what the
+        ephemeris covers — sampling outside its segments raises.
+
+        The clamp stays a minute inside the segment edge: skyfield
+        samples in TDB, which sits milliseconds off our TT instants.
+        """
+
+        margin = 1.0 / 1440
+        t0, t1 = self.year_window(year)
+        starts, ends = zip(*((s.start_jd, s.end_jd)
+                             for s in self.eph.spk.segments))
+        return (self.ts.tt_jd(max(t0.tt - pad_days, max(starts) + margin)),
+                self.ts.tt_jd(min(t1.tt + pad_days, min(ends) - margin)))
+
     def ecliptic_lon(self, t, body) -> float:
         """Apparent ecliptic longitude of date, degrees"""
 

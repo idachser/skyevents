@@ -40,6 +40,16 @@ def test_2027_known_eclipses():
     assert by_day["2027-08-02"] == "total"
 
 
+def test_ephemeris_edge_years_do_not_crash():
+    """The widened search window must clamp to ephemeris coverage:
+    2025 and 2030 are the edge years of the committed excerpt."""
+
+    for year, days in ((2025, ["2025-03-29", "2025-09-21"]),
+                       (2030, ["2030-06-01", "2030-11-25"])):
+        events = solar_eclipses.generate(year)
+        assert [e.dt_utc.strftime("%Y-%m-%d") for e in events] == days
+
+
 def test_year_boundary_no_misses_or_duplicates():
     """The new-moon search is wider than the year; each eclipse must
     land in exactly one year — the one containing the minimum."""
