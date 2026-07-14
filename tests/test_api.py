@@ -157,12 +157,20 @@ def test_ics_fold_75_octets():
     assert folded[0] + "".join(p[1:] for p in folded[1:]) == line
 
 
-def test_calendar_ics_lines_fit_75_octets(cache):
-    seed_2026(cache)
-    resp = client.get(
-        "/v1/calendar.ics", params={"year": 2026, "lang": "ru"})
-    for line in resp.text.split("\r\n"):
+def test_calendar_ics_folds_long_lines(cache):
+    long_name = ("Southern Delta Aquariids Extended Observation "
+                 "Campaign of the Whole Summer")
+    store.replace_year(cache, 2026, GENERATOR_VERSION, [Event.create(
+        EventType.METEOR_SHOWER,
+        datetime(2026, 7, 30, 12, tzinfo=timezone.utc),
+        ["sda-extended"], {"name": long_name, "zhr": 25})])
+    resp = client.get("/v1/calendar.ics", params={"year": 2026})
+    lines = resp.text.split("\r\n")
+    assert any(line.startswith(" ") for line in lines)  # folded
+    for line in lines:
         assert len(line.encode()) <= 75
+    unfolded = resp.text.replace("\r\n ", "")
+    assert f"SUMMARY:{long_name} meteor shower" in unfolded
 
 
 def test_calendar_ics_ungenerated_year_is_503(cache):
