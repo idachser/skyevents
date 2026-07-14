@@ -6,6 +6,8 @@ __pycache__/
 feed/
 *.ics
 *.db
+*.db-wal
+*.db-shm
 *.bsp
 !tests/data/de440s.bsp
 .env
