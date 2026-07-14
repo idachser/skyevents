@@ -9,6 +9,7 @@ empty window outside those years does not look like "no events".
 import asyncio
 import logging
 import os
+import sqlite3
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timezone
 from typing import Literal
@@ -74,6 +75,11 @@ async def refresh_loop():
 
 @asynccontextmanager
 async def lifespan(app):
+    try:
+        store.init().close()
+    except (sqlite3.OperationalError, OSError):
+        # a pre-generated read-only cache is still servable
+        logger.exception("cache init failed, serving it as-is")
     task = None
     if os.environ.get("SKYEVENTS_AUTOGEN", "1") != "0":
         task = asyncio.create_task(refresh_loop())

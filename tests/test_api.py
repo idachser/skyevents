@@ -17,7 +17,7 @@ def cache(tmp_path, monkeypatch):
 
     path = str(tmp_path / "cache.db")
     monkeypatch.setenv("SKYEVENTS_CACHE", path)
-    conn = store.connect(path)
+    conn = store.init(path)
     yield conn
     conn.close()
 

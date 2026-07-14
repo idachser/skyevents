@@ -7,12 +7,15 @@ breed duplicates in the bot's upsert table).
 """
 
 import json
+import logging
 import os
 import sqlite3
 from datetime import datetime, timezone
 
 from skyevents.ephemeris import data_dir
 from skyevents.model import Event
+
+logger = logging.getLogger("skyevents")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS years (
@@ -39,13 +42,34 @@ def db_path() -> str:
 
 
 def connect(path: str | None = None) -> sqlite3.Connection:
+    """Open the cache read-write-capable but without touching the file;
+    init() must have set up the schema once at startup."""
+
+    conn = sqlite3.connect(path or db_path(), timeout=15)
+    try:
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.OperationalError:
+        pass  # read-only cache: keep serving with default durability
+    return conn
+
+
+def init(path: str | None = None) -> sqlite3.Connection:
+    """One-time setup at startup: directory, WAL journal mode, schema.
+
+    WAL keeps request threads reading while the background generator
+    rewrites a year in one long transaction. journal_mode persists in
+    the database file, so it is set (and its result checked) here
+    rather than on every per-request connect.
+    """
+
     path = path or db_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    conn = sqlite3.connect(path, timeout=15)
-    # WAL: request threads keep reading while the background
-    # generator rewrites a year in one long transaction
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn = connect(path)
+    mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+    if mode != "wal":
+        logger.warning(
+            "journal_mode is %r, not wal: reads will block while the "
+            "cache regenerates", mode)
     conn.executescript(SCHEMA)
     return conn
 

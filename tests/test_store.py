@@ -10,29 +10,30 @@ def make_event(day: int, type=EventType.MOON_PHASE, params=None):
         ["moon"], params or {"phase": "full"})
 
 
-def test_connect_enables_wal(tmp_path):
-    conn = store.connect(str(tmp_path / "cache.db"))
+def test_init_enables_wal(tmp_path):
+    conn = store.init(str(tmp_path / "cache.db"))
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
 
 
-def test_reads_are_not_blocked_by_a_writer(tmp_path):
+def test_writer_commits_while_a_reader_is_inside_a_transaction(tmp_path):
+    """Discriminates WAL from rollback journal: there the writer's
+    commit needs an exclusive lock and stalls on the open reader."""
+
     path = str(tmp_path / "cache.db")
-    writer = store.connect(path)
+    writer = store.init(path)
     reader = store.connect(path)
     store.replace_year(writer, 2026, 1, [make_event(3)])
 
-    writer.execute("BEGIN IMMEDIATE")
-    writer.execute("DELETE FROM events WHERE year = 2026")
-    got = store.events_between(
-        reader,
-        datetime(2026, 1, 1, tzinfo=timezone.utc),
-        datetime(2027, 1, 1, tzinfo=timezone.utc))
-    writer.rollback()
-    assert [e.dt_utc.day for e in got] == [3]
+    reader.execute("BEGIN")
+    assert reader.execute("SELECT count(*) FROM events").fetchone()[0] == 1
+    writer.execute("PRAGMA busy_timeout=500")  # fail fast, not in 15 s
+    store.replace_year(writer, 2027, 1, [make_event(5)])
+    reader.rollback()
+    assert store.cached_years(writer, 1) == [2026, 2027]
 
 
 def test_round_trip(tmp_path):
-    conn = store.connect(str(tmp_path / "cache.db"))
+    conn = store.init(str(tmp_path / "cache.db"))
     events = [make_event(3), make_event(10)]
     store.replace_year(conn, 2026, 1, events)
 
@@ -45,7 +46,7 @@ def test_round_trip(tmp_path):
 
 
 def test_range_is_half_open_and_ordered(tmp_path):
-    conn = store.connect(str(tmp_path / "cache.db"))
+    conn = store.init(str(tmp_path / "cache.db"))
     store.replace_year(conn, 2026, 1, [make_event(10), make_event(3)])
 
     got = store.events_between(
@@ -56,7 +57,7 @@ def test_range_is_half_open_and_ordered(tmp_path):
 
 
 def test_type_filter(tmp_path):
-    conn = store.connect(str(tmp_path / "cache.db"))
+    conn = store.init(str(tmp_path / "cache.db"))
     store.replace_year(conn, 2026, 1, [
         make_event(3),
         make_event(5, EventType.LUNAR_APSIS,
@@ -72,7 +73,7 @@ def test_type_filter(tmp_path):
 
 
 def test_replace_year_drops_stale_events(tmp_path):
-    conn = store.connect(str(tmp_path / "cache.db"))
+    conn = store.init(str(tmp_path / "cache.db"))
     store.replace_year(conn, 2026, 1, [make_event(3), make_event(10)])
     store.replace_year(conn, 2026, 2, [make_event(10)])
 
