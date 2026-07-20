@@ -11,7 +11,7 @@ SEASONS = ("march_equinox", "june_solstice",
 
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.year_window(year)
+    t0, t1 = ctx.search_window(year)
     times, seasons = almanac.find_discrete(
         t0, t1, almanac.seasons(ctx.eph))
     return [

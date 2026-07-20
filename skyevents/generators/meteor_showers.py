@@ -66,7 +66,7 @@ SHOWERS = [
 
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.year_window(year)
+    t0, t1 = ctx.search_window(year)
 
     def sun_lon(t):
         pos = ctx.earth.at(t).observe(ctx.sun).apparent()

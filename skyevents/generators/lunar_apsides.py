@@ -6,14 +6,17 @@ from skyevents.generators.base import context, dedupe_extrema
 from skyevents.model import Event, EventType
 
 
+STEP_DAYS = 5.0
+
+
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.year_window(year)
+    t0, t1 = ctx.search_window(year, step_days=STEP_DAYS)
 
     def distance_km(t):
         return ctx.earth.at(t).observe(ctx.moon).distance().km
 
-    distance_km.step_days = 5.0
+    distance_km.step_days = STEP_DAYS
 
     events = []
     for finder, kind in ((find_minima, "perigee"), (find_maxima, "apogee")):

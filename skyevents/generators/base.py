@@ -28,6 +28,9 @@ class Context:
                            else f"{name} barycenter"]
             for name in PLANETS
         }
+        segments = self.eph.spk.segments
+        self.coverage = (max(s.start_jd for s in segments),
+                         min(s.end_jd for s in segments))
 
     def body(self, name):
         if name == "sun":
@@ -41,20 +44,34 @@ class Context:
 
         return self.ts.utc(year, 1, 1), self.ts.utc(year + 1, 1, 1)
 
-    def padded_window(self, year: int, pad_days: float):
-        """year_window widened by pad_days, clamped to what the
-        ephemeris covers — sampling outside its segments raises.
+    def search_window(self, year: int, pad_days: float = 0.0,
+                      step_days: float = 0.0):
+        """year_window widened by pad_days, clamped to ephemeris coverage.
 
-        The clamp stays a minute inside the segment edge: skyfield
-        samples in TDB, which sits milliseconds off our TT instants.
+        find_minima/find_maxima deliberately sample one step outside the
+        window they are handed, and the ephemeris raises rather than
+        extrapolate, so the clamp keeps step_days clear of the segment
+        edges (plus a minute: skyfield samples in TDB, milliseconds off
+        our TT instants). Pass the step_days of the search that will run
+        on the window; searches near the edge of an ephemeris therefore
+        miss events in its first and last step_days.
         """
 
-        margin = 1.0 / 1440
         t0, t1 = self.year_window(year)
-        starts, ends = zip(*((s.start_jd, s.end_jd)
-                             for s in self.eph.spk.segments))
-        return (self.ts.tt_jd(max(t0.tt - pad_days, max(starts) + margin)),
-                self.ts.tt_jd(min(t1.tt + pad_days, min(ends) - margin)))
+        start, end = self.coverage
+        margin = step_days + 1.0 / 1440
+        lo = max(t0.tt - pad_days, start + margin)
+        hi = min(t1.tt + pad_days, end - margin)
+        # the year itself must be searchable, not just its padding —
+        # otherwise a year past the edge yields a sliver of the previous
+        # one and the generator reports "no events" instead of failing
+        if t1.tt <= lo or t0.tt >= hi:
+            fmt = "%Y-%m-%d %H:%M"
+            raise ValueError(
+                f"year {year} is outside the ephemeris coverage "
+                f"{self.ts.tt_jd(start).utc_strftime(fmt)}..."
+                f"{self.ts.tt_jd(end).utc_strftime(fmt)}")
+        return self.ts.tt_jd(lo), self.ts.tt_jd(hi)
 
     def ecliptic_lon(self, t, body) -> float:
         """Apparent ecliptic longitude of date, degrees"""

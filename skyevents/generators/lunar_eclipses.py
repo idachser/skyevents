@@ -13,9 +13,13 @@ from skyevents.model import Event, EventType
 KINDS = ("penumbral", "partial", "total")
 
 
+# eclipselib searches full moons with find_maxima at this step
+STEP_DAYS = 5.0
+
+
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.year_window(year)
+    t0, t1 = ctx.search_window(year, step_days=STEP_DAYS)
     times, kinds, details = eclipselib.lunar_eclipses(t0, t1, ctx.eph)
     return [
         Event.create(

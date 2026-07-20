@@ -21,18 +21,22 @@ R_MOON_KM = 1737.4
 R_EARTH_KM = 6378.14
 
 
+STEP_DAYS = 0.05
+
+
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.year_window(year)
 
     # a new moon just across the year boundary can still have its
     # separation minimum inside this year, so search wider and assign
-    # each eclipse to the year containing the minimum
-    lo, hi = ctx.padded_window(year, 2.0)
+    # each eclipse to the year containing the minimum. The window keeps
+    # STEP_DAYS clear of the ephemeris edges, so the per-new-moon
+    # minima searches clamped to it stay inside coverage too.
+    lo, hi = ctx.search_window(year, pad_days=2.0, step_days=STEP_DAYS)
     times, phases = find_discrete(lo, hi, almanac.moon_phases(ctx.eph))
     new_moons = [t for t, phase in zip(times, phases) if phase == 0]
 
-    separation = ctx.separation(ctx.sun, ctx.moon, 0.05)
+    separation = ctx.separation(ctx.sun, ctx.moon, STEP_DAYS)
     events = []
     for new_moon in new_moons:
         m_lo = ctx.ts.tt_jd(max(new_moon.tt - 1.5, lo.tt))
@@ -41,7 +45,7 @@ def generate(year: int) -> list[Event]:
         if len(t_min) == 0:
             continue
         t, sep = t_min[0], float(sep_min[0])
-        if not (t0.tt <= t.tt < t1.tt):
+        if t.utc_datetime().year != year:
             continue
 
         e = ctx.earth.at(t)

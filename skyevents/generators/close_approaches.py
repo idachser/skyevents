@@ -32,13 +32,13 @@ def threshold(a: str, b: str) -> float:
 
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.year_window(year)
 
     pairs = [("moon", planet, 2.0) for planet in PLANETS]
     pairs += [(a, b, 5.0) for a, b in combinations(PLANETS, 2)]
 
     events = []
     for a, b, step_days in pairs:
+        t0, t1 = ctx.search_window(year, step_days=step_days)
         body_a, body_b = ctx.body(a), ctx.body(b)
         times, separations = find_minima(
             t0, t1, ctx.separation(body_a, body_b, step_days))

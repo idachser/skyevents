@@ -15,7 +15,7 @@ INNER = ("mercury", "venus")
 
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.year_window(year)
+    t0, t1 = ctx.search_window(year)
 
     events = []
     for name in PLANETS:
