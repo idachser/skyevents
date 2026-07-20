@@ -57,6 +57,9 @@ def generate_missing():
             events = generate_year(year)
             store.replace_year(conn, year, GENERATOR_VERSION, events)
             logger.info("cached %d: %d events", year, len(events))
+        dropped = store.drop_stale_versions(conn, GENERATOR_VERSION)
+        if dropped:
+            logger.info("dropped years from older generators: %s", dropped)
     finally:
         conn.close()
 

@@ -107,6 +107,19 @@ def test_replace_year_drops_stale_events(conn):
     assert store.cached_years(conn, 2) == [2026]
 
 
+def test_drop_stale_versions(conn):
+    store.replace_year(conn, 2025, 1, [make_event(3)])
+    store.replace_year(conn, 2026, 2, [make_event(10)])
+
+    assert store.drop_stale_versions(conn, 2) == [2025]
+    assert store.cached_years(conn, 1) == []
+    assert store.cached_years(conn, 2) == [2026]
+    assert conn.execute("SELECT count(*) FROM events").fetchone()[0] == 1
+    # nothing left to drop, and the current version is untouched
+    assert store.drop_stale_versions(conn, 2) == []
+    assert store.cached_years(conn, 2) == [2026]
+
+
 def test_corrupt_cache_raises_database_error(tmp_path):
     """The class api.lifespan and /health must catch."""
 
