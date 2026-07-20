@@ -8,7 +8,8 @@ requires-python = ">=3.12"
 dependencies = [
     "skyfield>=1.49,<2",
     "pydantic>=2.7,<3",
-    "fastapi>=0.111,<1",
+    # 0.115 is where query parameter models learned extra="forbid"
+    "fastapi>=0.115,<1",
     "uvicorn>=0.30,<1",
 ]
 

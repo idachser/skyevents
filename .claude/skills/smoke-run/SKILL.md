@@ -62,11 +62,13 @@ table transfers.
 ## Gotchas
 
 - The query parameter is `types` (plural, comma-separated), not `type`.
-  FastAPI ignores unknown query params silently, so `type=solar_eclipse`
-  returns **every** event and looks like a broken filter. Easy to
-  misdiagnose as a bug.
-- `/v1/calendar.ics` requires `year`; bare `/v1/calendar.ics` is a 422 by
-  design.
+  Both endpoints now reject unknown params with a 422 (`extra="forbid"`
+  on the query models), so a misspelling fails loudly instead of silently
+  returning everything.
+- `/v1/calendar.ics` takes an optional `year`, defaulting to the current
+  UTC year — a bare feed URL is valid and is what the bot actually
+  requests. It 503s (with `Retry-After`) if that year is not generated
+  yet, which is not the same as a broken endpoint.
 - `/health` lists next year only from December (`needed_years()` in
   `skyevents/api.py`). Seeing a single year mid-year is correct, not a
   cache failure.

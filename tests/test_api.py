@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from skyevents import store
+from skyevents import api, store
 from skyevents.api import app
 from skyevents.generators import GENERATOR_VERSION
 from skyevents.model import Event, EventType
@@ -21,6 +21,20 @@ def cache(tmp_path, monkeypatch):
     conn = store.connect(path)
     yield conn
     conn.close()
+
+
+def frozen_datetime(instant):
+    """Stand-in for api.datetime with now() pinned to `instant`.
+
+    A subclass so the plain datetime(...) calls in api.py keep working.
+    """
+
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant
+
+    return Frozen
 
 
 def seed_2026(conn, version=GENERATOR_VERSION):
@@ -207,13 +221,38 @@ def test_calendar_ics_ungenerated_year_is_503(cache):
     assert resp.headers["retry-after"]
 
 
+def test_calendar_ics_year_defaults_to_now(cache, monkeypatch):
+    """A bare feed URL must keep working when the year rolls over."""
+
+    seed_2026(cache)
+    monkeypatch.setattr(
+        api, "datetime",
+        frozen_datetime(datetime(2026, 7, 20, tzinfo=timezone.utc)))
+    resp = client.get("/v1/calendar.ics")
+    assert resp.status_code == 200
+    assert "UID:moon_phase:moon:20260103" in resp.text
+
+
 @pytest.mark.parametrize("params", [
     {"from": "2026-02-01", "to": "2026-01-01"},
     {"from": "2026-01-01", "to": "2027-06-01"},
     {"from": "2026-01-01", "to": "2026-02-01", "types": "nope"},
     {"from": "2026-01-01", "to": "2026-02-01", "lang": "de"},
     {"from": "2026-01-01"},
+    # a misspelled filter must fail loudly, not silently return everything
+    {"from": "2026-01-01", "to": "2026-02-01", "type": "moon_phase"},
+    {"from": "2026-01-01", "to": "2026-02-01", "limit": "10"},
 ])
 def test_validation_rejected(cache, params):
     seed_2026(cache)
     assert client.get("/v1/events", params=params).status_code == 422
+
+
+@pytest.mark.parametrize("params", [
+    {"year": 2026, "langs": "ru"},
+    {"years": 2026},
+])
+def test_calendar_ics_rejects_unknown_params(cache, params):
+    seed_2026(cache)
+    assert client.get(
+        "/v1/calendar.ics", params=params).status_code == 422

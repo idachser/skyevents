@@ -12,9 +12,10 @@ import os
 import sqlite3
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timezone
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Response
+from pydantic import BaseModel, ConfigDict, Field
 
 from skyevents import store, texts
 from skyevents.generators import GENERATOR_VERSION, generate_year
@@ -24,6 +25,18 @@ MAX_WINDOW_DAYS = 400
 REFRESH_INTERVAL_S = 6 * 3600
 
 logger = logging.getLogger("skyevents")
+
+
+class StrictQuery(BaseModel):
+    """Query params that reject anything they do not declare.
+
+    A silently ignored unknown param is the worst failure mode here: ask
+    for `?type=solar_eclipse` (singular) and FastAPI's default would hand
+    back the *whole* year, which reads as a broken filter rather than a
+    typo. Better to 422 on the misspelling.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def needed_years(today: date) -> list[int]:
@@ -174,13 +187,25 @@ def ics_fold(line: str) -> list[str]:
     return out
 
 
+class CalendarQuery(StrictQuery):
+    # Optional so the feed URL can stay a constant in the bot's config:
+    # a bare /v1/calendar.ics keeps working when the year rolls over.
+    year: int | None = None
+    lang: Literal["en", "ru"] = "en"
+
+
 @app.get("/v1/calendar.ics")
-def calendar_ics(year: int, lang: Literal["en", "ru"] = "en"):
+def calendar_ics(q: Annotated[CalendarQuery, Query()]):
     """Yearly iCal, format-compatible with the in-the-sky.org feed.
 
     Lets the bot switch data sources by swapping the feed URL before
-    it grows a real API client.
+    it grows a real API client. Defaults to the current UTC year.
     """
+
+    lang = q.lang
+    year = q.year
+    if year is None:
+        year = datetime.now(timezone.utc).year
 
     conn = store.connect()
     try:
@@ -216,15 +241,18 @@ def calendar_ics(year: int, lang: Literal["en", "ru"] = "en"):
                     media_type="text/calendar; charset=utf-8")
 
 
+class EventsQuery(StrictQuery):
+    from_: date = Field(alias="from")
+    to: date
+    types: str | None = None
+    lang: Literal["en", "ru"] = "en"
+
+
 @app.get("/v1/events")
-def events(
-    from_: date = Query(alias="from"),
-    to: date = Query(),
-    types: str | None = None,
-    lang: Literal["en", "ru"] = "en",
-):
+def events(q: Annotated[EventsQuery, Query()]):
     """Events with from <= dt_utc < to (dates are UTC midnights)"""
 
+    from_, to, types, lang = q.from_, q.to, q.types, q.lang
     if from_ > to:
         raise HTTPException(422, "'from' must not be after 'to'")
     if (to - from_).days > MAX_WINDOW_DAYS:
