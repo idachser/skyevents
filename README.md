@@ -13,9 +13,14 @@ Built as the data source for [astro_bot](../astro_bot); see
 All responses are JSON unless noted. Times are UTC ISO-8601. Interactive
 docs are served by FastAPI at `/docs`.
 
-Both endpoints **reject unknown query parameters** with a 422 — a
+Every endpoint **rejects unknown query parameters** with a 422 — a
 misspelled `?type=` (the filter is `types`, plural) fails loudly instead
 of silently returning everything.
+
+A **repeated** parameter is a 422 too. `?types=a&types=b` would otherwise
+collapse to `b`, which reads as a working filter that quietly dropped
+half the request — note that `params={"types": [...]}` in requests/httpx
+serializes to exactly that, so pass a comma-separated string instead.
 
 ### `GET /v1/events`
 
@@ -25,7 +30,7 @@ The main endpoint. Returns events in a half-open window `from <= dt_utc < to`.
 |---|---|---|---|
 | `from` | yes | — | `YYYY-MM-DD`, treated as UTC midnight |
 | `to` | yes | — | `YYYY-MM-DD`, exclusive |
-| `types` | no | all | comma-separated event types (see below) |
+| `types` | no | all | comma-separated event types (see below); a space after the comma is fine |
 | `lang` | no | `en` | `en` or `ru` |
 
 ```console
@@ -61,7 +66,8 @@ generated years, and events are returned only from that intersection:
   uncovered remainder is unknown, not empty.
 
 Errors: 422 for `from > to`, a window wider than 400 days, an unknown
-value in `types`, an unknown `lang`, or any undeclared parameter.
+value in `types`, an unknown `lang`, or any undeclared or repeated
+parameter.
 
 ### `GET /v1/calendar.ics`
 
@@ -70,7 +76,7 @@ feed it replaces, so the bot can switch over by swapping a URL.
 
 | Param | Required | Default | Notes |
 |---|---|---|---|
-| `year` | no | current UTC year | |
+| `year` | no | current UTC year | 1900–2100 |
 | `lang` | no | `en` | `en` or `ru` |
 
 `year` is optional so the feed URL can stay a constant in client config

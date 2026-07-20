@@ -89,6 +89,12 @@ expect "events: unknown query param rejected" 422 \
   "/v1/events?from=$year-01-01&to=$year-03-01&type=moon_phase"
 expect "ics: unknown query param rejected" 422 \
   "/v1/calendar.ics?year=$year&langs=ru"
+expect "events: repeated query param rejected" 422 \
+  "/v1/events?from=$year-01-01&to=$year-03-01&types=moon_phase&types=season"
+expect "events: space after comma in types tolerated" 200 \
+  "/v1/events?from=$year-01-01&to=$year-03-01&types=moon_phase,%20season"
+expect "health: unknown query param rejected" 422 "/health?foo=1"
+expect "ics: year out of range rejected" 422 "/v1/calendar.ics?year=999999999999"
 
 # --- filtering and i18n ----------------------------------------------
 
@@ -112,17 +118,21 @@ fi
 
 # --- ics --------------------------------------------------------------
 
-# A bare feed URL defaults to the current year -- 200 if that year is
-# cached, 503 if it is not (correct either way; the bot's URL is a
-# constant, so this is the request it actually makes).
+# A bare feed URL must default to the current year -- the request the
+# bot actually makes, since its URL is a constant.
+#
+# Only provable when that year is cached: if it is not, the endpoint
+# returns 503 for *any* default (current year, 1900, or None restored),
+# so a 503 assertion here would pass no matter how broken the default
+# is. Say so instead of banking a vacuous PASS.
 this_year=$(date -u +%Y)
 if printf '%s ' $years | grep -q "$this_year "; then
   expect "ics: bare URL defaults to current year" 200 "/v1/calendar.ics" \
     "BEGIN:VCALENDAR"
 else
-  note "current year $this_year is not cached; bare ICS should be 503"
-  expect "ics: bare URL defaults to current year (uncached -> 503)" 503 \
-    "/v1/calendar.ics"
+  note "SKIPPED ics bare-URL default: current year $this_year is not"
+  note "cached, so a 503 would not distinguish a correct default from a"
+  note "broken one. Re-run once $this_year is generated."
 fi
 
 ics=$(mktemp)

@@ -8,8 +8,11 @@ requires-python = ">=3.12"
 dependencies = [
     "skyfield>=1.49,<2",
     "pydantic>=2.7,<3",
-    # 0.115 is where query parameter models learned extra="forbid"
-    "fastapi>=0.115,<1",
+    # Query parameter models arrived in 0.115, but the `from` alias on
+    # one is silently dropped until 0.124 (with pydantic 2.13), which
+    # 422s every /v1/events request. Floor verified by running the API
+    # tests against 0.115-0.125; 0.124 is the first that passes.
+    "fastapi>=0.124,<1",
     "uvicorn>=0.30,<1",
 ]
 

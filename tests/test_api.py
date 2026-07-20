@@ -27,11 +27,15 @@ def frozen_datetime(instant):
     """Stand-in for api.datetime with now() pinned to `instant`.
 
     A subclass so the plain datetime(...) calls in api.py keep working.
+    Rejects a tz-less now(): "current year" must be the UTC one, and a
+    naive now() would silently be the server's local year -- wrong on
+    either side of midnight UTC for most deployments.
     """
 
     class Frozen(datetime):
         @classmethod
         def now(cls, tz=None):
+            assert tz is timezone.utc, "api must ask for UTC explicitly"
             return instant
 
     return Frozen
@@ -256,3 +260,44 @@ def test_calendar_ics_rejects_unknown_params(cache, params):
     seed_2026(cache)
     assert client.get(
         "/v1/calendar.ics", params=params).status_code == 422
+
+
+def test_types_tolerates_space_after_comma(cache):
+    seed_2026(cache)
+    resp = client.get("/v1/events", params={
+        "from": "2026-01-01", "to": "2026-12-01",
+        "types": "moon_phase, close_approach"})
+    assert resp.status_code == 200
+    assert {e["type"] for e in resp.json()["events"]} == {
+        "moon_phase", "close_approach"}
+
+
+@pytest.mark.parametrize("query", [
+    # a repeated param must not silently collapse to the last value;
+    # requests/httpx serialize params={"types": [...]} exactly this way
+    "from=2026-01-01&to=2026-02-01&types=moon_phase&types=close_approach",
+    "from=2026-01-01&from=2026-06-01&to=2026-07-01",
+    "from=2026-01-01&to=2026-02-01&lang=en&lang=ru",
+])
+def test_repeated_query_param_rejected(cache, query):
+    seed_2026(cache)
+    assert client.get(f"/v1/events?{query}").status_code == 422
+
+
+def test_repeated_query_param_rejected_on_ics(cache):
+    seed_2026(cache)
+    assert client.get(
+        "/v1/calendar.ics?year=2026&year=2027").status_code == 422
+
+
+def test_health_rejects_unknown_params(cache):
+    assert client.get("/health", params={"foo": "1"}).status_code == 422
+
+
+@pytest.mark.parametrize("year", [0, 1899, 2101, 999999999999])
+def test_calendar_ics_year_out_of_range_is_422(cache, year):
+    """422 rather than a 500 from datetime(year, 1, 1) overflowing."""
+
+    seed_2026(cache)
+    assert client.get(
+        "/v1/calendar.ics", params={"year": year}).status_code == 422

@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timezone
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from skyevents import store, texts
@@ -23,6 +23,12 @@ from skyevents.model import Event, EventType
 
 MAX_WINDOW_DAYS = 400
 REFRESH_INTERVAL_S = 6 * 3600
+
+# Sanity bounds on a requested year, not the ephemeris limits (generators
+# raise for years outside DE440s coverage). They exist so an absurd year
+# is a 422 no matter where the cache lookup sits: datetime(year, 1, 1)
+# raises ValueError -- a 500 -- for anything past 9999.
+MIN_YEAR, MAX_YEAR = 1900, 2100
 
 logger = logging.getLogger("skyevents")
 
@@ -37,6 +43,24 @@ class StrictQuery(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+
+async def reject_duplicate_params(request: Request):
+    """422 on a repeated query param instead of silently taking the last.
+
+    Pydantic collapses `?types=a&types=b` to `"b"`, which reads as a
+    working filter that quietly dropped half the request -- the same
+    silent-wrong-answer failure `extra="forbid"` rules out for misspelled
+    names. Clients that serialize a list (requests, httpx) produce
+    exactly this shape, so it is a likely mistake, not an exotic one.
+    """
+
+    seen = set()
+    for key, _ in request.query_params.multi_items():
+        if key in seen:
+            raise HTTPException(
+                422, f"query parameter {key!r} given more than once")
+        seen.add(key)
 
 
 def needed_years(today: date) -> list[int]:
@@ -110,7 +134,8 @@ async def lifespan(app):
         task.cancel()
 
 
-app = FastAPI(title="skyevents", version="1.0", lifespan=lifespan)
+app = FastAPI(title="skyevents", version="1.0", lifespan=lifespan,
+              dependencies=[Depends(reject_duplicate_params)])
 
 
 def coverage_runs(years: list[int]):
@@ -144,7 +169,7 @@ def serialize(event: Event, lang: str) -> dict:
 
 
 @app.get("/health")
-def health():
+def health(q: Annotated[StrictQuery, Query()]):
     """Liveness for compose healthchecks and CI smoke tests.
 
     Answers right after startup: an empty cache is reported, not
@@ -190,7 +215,7 @@ def ics_fold(line: str) -> list[str]:
 class CalendarQuery(StrictQuery):
     # Optional so the feed URL can stay a constant in the bot's config:
     # a bare /v1/calendar.ics keeps working when the year rolls over.
-    year: int | None = None
+    year: int | None = Field(None, ge=MIN_YEAR, le=MAX_YEAR)
     lang: Literal["en", "ru"] = "en"
 
 
@@ -202,7 +227,6 @@ def calendar_ics(q: Annotated[CalendarQuery, Query()]):
     it grows a real API client. Defaults to the current UTC year.
     """
 
-    lang = q.lang
     year = q.year
     if year is None:
         year = datetime.now(timezone.utc).year
@@ -224,7 +248,7 @@ def calendar_ics(q: Annotated[CalendarQuery, Query()]):
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0",
              "PRODID:-//skyevents//EN"]
     for event in found:
-        summary, description = texts.render(event, lang)
+        summary, description = texts.render(event, q.lang)
         lines += [
             "BEGIN:VEVENT",
             f"UID:{event.uid}",
@@ -242,7 +266,9 @@ def calendar_ics(q: Annotated[CalendarQuery, Query()]):
 
 
 class EventsQuery(StrictQuery):
-    from_: date = Field(alias="from")
+    # Annotated is the form pydantic documents for aliases; `from` is a
+    # keyword, so the field cannot simply be named after the parameter.
+    from_: Annotated[date, Field(alias="from")]
     to: date
     types: str | None = None
     lang: Literal["en", "ru"] = "en"
@@ -252,18 +278,20 @@ class EventsQuery(StrictQuery):
 def events(q: Annotated[EventsQuery, Query()]):
     """Events with from <= dt_utc < to (dates are UTC midnights)"""
 
-    from_, to, types, lang = q.from_, q.to, q.types, q.lang
+    from_, to = q.from_, q.to
     if from_ > to:
         raise HTTPException(422, "'from' must not be after 'to'")
     if (to - from_).days > MAX_WINDOW_DAYS:
         raise HTTPException(
             422, f"window wider than {MAX_WINDOW_DAYS} days")
     type_filter = None
-    if types is not None:
+    if q.types is not None:
         try:
-            type_filter = [EventType(t) for t in types.split(",")]
+            # tolerate "a, b": a space after the comma is formatting, not
+            # ambiguity, and hand-written requests are full of it
+            type_filter = [EventType(t.strip()) for t in q.types.split(",")]
         except ValueError:
-            raise HTTPException(422, f"unknown event type in {types!r}")
+            raise HTTPException(422, f"unknown event type in {q.types!r}")
 
     start = datetime.combine(from_, time.min, tzinfo=timezone.utc)
     end = datetime.combine(to, time.min, tzinfo=timezone.utc)
@@ -283,7 +311,7 @@ def events(q: Annotated[EventsQuery, Query()]):
         conn.close()
 
     return {
-        "events": [serialize(e, lang) for e in found],
+        "events": [serialize(e, q.lang) for e in found],
         "coverage": {"from": covered_start.isoformat(),
                      "to": covered_end.isoformat()},
     }
