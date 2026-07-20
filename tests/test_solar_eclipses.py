@@ -1,7 +1,13 @@
+from functools import cache
+
 from skyevents.generators import solar_eclipses
 from skyevents.model import EventType
 
 from tests.util import assert_matches_reference, assert_unique_uids
+
+# several tests cover the same years; each generate() is a full-year
+# moon-phase sweep plus a minima search per new moon
+generate = cache(solar_eclipses.generate)
 
 # 2026 from the in-the-sky.org feed (stage-0 spike capture)
 REFERENCE = [
@@ -13,7 +19,7 @@ TOL_MINUTES = 3
 
 
 def test_2026_matches_feed_reference():
-    events = solar_eclipses.generate(2026)
+    events = generate(2026)
 
     def check(kind):
         def _check(event):
@@ -33,7 +39,7 @@ def test_2026_matches_feed_reference():
 def test_2027_known_eclipses():
     """Independent reference: annular Feb 6 and total Aug 2, 2027"""
 
-    events = solar_eclipses.generate(2027)
+    events = generate(2027)
     by_day = {e.dt_utc.strftime("%Y-%m-%d"): e.params["kind"]
               for e in events}
     assert by_day["2027-02-06"] == "annular"
@@ -46,7 +52,7 @@ def test_ephemeris_edge_years_do_not_crash():
 
     for year, days in ((2025, ["2025-03-29", "2025-09-21"]),
                        (2030, ["2030-06-01", "2030-11-25"])):
-        events = solar_eclipses.generate(year)
+        events = generate(year)
         assert [e.dt_utc.strftime("%Y-%m-%d") for e in events] == days
 
 
@@ -54,9 +60,9 @@ def test_year_boundary_no_misses_or_duplicates():
     """The new-moon search is wider than the year; each eclipse must
     land in exactly one year — the one containing the minimum."""
 
-    uids = []
+    across_years = []
     for year in (2026, 2027, 2028):
-        events = solar_eclipses.generate(year)
+        events = generate(year)
         assert all(e.dt_utc.year == year for e in events)
-        uids += [e.uid for e in events]
-    assert len(uids) == len(set(uids))
+        across_years += events
+    assert_unique_uids(across_years)
