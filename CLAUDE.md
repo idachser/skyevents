@@ -34,7 +34,8 @@ uv run ruff check skyevents tests  # lint
   rendered from templates by event type (plan stage 3).
 - API contract (plan stage 4): versioned paths (`/v1/…`), explicit cache
   coverage in responses — an empty window outside generated years must
-  not look like "no events".
+  not look like "no events". The reference lives in `README.md`; keep it
+  in sync when endpoints, params, or event `params` change.
 
 ## Testing conventions
 
