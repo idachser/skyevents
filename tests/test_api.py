@@ -262,14 +262,28 @@ def test_calendar_ics_rejects_unknown_params(cache, params):
         "/v1/calendar.ics", params=params).status_code == 422
 
 
-def test_types_tolerates_space_after_comma(cache):
+@pytest.mark.parametrize("types", [
+    "moon_phase, close_approach",     # space after the comma
+    "moon_phase,close_approach,",     # trailing comma
+    " moon_phase , close_approach ",  # both, everywhere
+])
+def test_types_tolerates_formatting_slack(cache, types):
     seed_2026(cache)
     resp = client.get("/v1/events", params={
-        "from": "2026-01-01", "to": "2026-12-01",
-        "types": "moon_phase, close_approach"})
+        "from": "2026-01-01", "to": "2026-12-01", "types": types})
     assert resp.status_code == 200
     assert {e["type"] for e in resp.json()["events"]} == {
         "moon_phase", "close_approach"}
+
+
+@pytest.mark.parametrize("types", ["", " ", ",", " , "])
+def test_types_naming_nothing_is_422(cache, types):
+    """An empty filter would mean "no events", not "no filter"."""
+
+    seed_2026(cache)
+    resp = client.get("/v1/events", params={
+        "from": "2026-01-01", "to": "2026-12-01", "types": types})
+    assert resp.status_code == 422
 
 
 @pytest.mark.parametrize("query", [

@@ -176,6 +176,12 @@ def health(q: Annotated[StrictQuery, Query()]):
     awaited (background generation can take minutes on first run). An
     unusable cache (unreadable file, missing schema) is a 503 so the
     healthcheck fails loudly instead of every request 500ing.
+
+    `q` is unread on purpose and must stay: the endpoint takes no
+    parameters, and declaring the empty model is what makes an
+    unexpected one a 422 here as everywhere else. Deleting it as dead
+    code silently reopens that hole -- test_health_rejects_unknown_params
+    is what catches it.
     """
 
     try:
@@ -287,9 +293,17 @@ def events(q: Annotated[EventsQuery, Query()]):
     type_filter = None
     if q.types is not None:
         try:
-            # tolerate "a, b": a space after the comma is formatting, not
-            # ambiguity, and hand-written requests are full of it
-            type_filter = [EventType(t.strip()) for t in q.types.split(",")]
+            # tolerate "a, b" and a trailing "a,b,": both are formatting
+            # slack, not ambiguity, and string-joined lists are full of
+            # them
+            type_filter = [EventType(part) for part in
+                           (t.strip() for t in q.types.split(","))
+                           if part]
+            # ...but "types=" naming nothing is a request for an empty
+            # filter, which would silently mean "no events" rather than
+            # "no filter"
+            if not type_filter:
+                raise ValueError(q.types)
         except ValueError:
             raise HTTPException(422, f"unknown event type in {q.types!r}")
 

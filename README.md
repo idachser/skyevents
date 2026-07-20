@@ -30,7 +30,7 @@ The main endpoint. Returns events in a half-open window `from <= dt_utc < to`.
 |---|---|---|---|
 | `from` | yes | — | `YYYY-MM-DD`, treated as UTC midnight |
 | `to` | yes | — | `YYYY-MM-DD`, exclusive |
-| `types` | no | all | comma-separated event types (see below); a space after the comma is fine |
+| `types` | no | all | comma-separated event types (see below); surrounding spaces and a trailing comma are fine, but naming none is a 422 |
 | `lang` | no | `en` | `en` or `ru` |
 
 ```console
