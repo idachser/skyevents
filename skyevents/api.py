@@ -41,8 +41,12 @@ def generate_missing():
     A version bump makes the *needed* years "missing" again, so they
     regenerate on next startup. Past years intentionally drop out of
     coverage: the bot only announces upcoming events (see the plan).
+
+    Re-runs init first: it is cheap, and it rebuilds the schema if the
+    cache file was deleted or replaced while the service was running.
     """
 
+    store.init()
     conn = store.connect()
     try:
         cached = set(store.cached_years(conn, GENERATOR_VERSION))
@@ -76,10 +80,12 @@ async def refresh_loop():
 @asynccontextmanager
 async def lifespan(app):
     try:
-        store.init().close()
-    except (sqlite3.OperationalError, OSError):
-        # a pre-generated read-only cache is still servable
-        logger.exception("cache init failed, serving it as-is")
+        store.init()
+    except (sqlite3.DatabaseError, OSError):
+        # start anyway so /health can report the cache as unusable
+        # (a bare crash loop tells an operator far less); the refresh
+        # loop retries init on every cycle
+        logger.exception("cache init failed")
     task = None
     if os.environ.get("SKYEVENTS_AUTOGEN", "1") != "0":
         task = asyncio.create_task(refresh_loop())
@@ -126,14 +132,19 @@ def health():
     """Liveness for compose healthchecks and CI smoke tests.
 
     Answers right after startup: an empty cache is reported, not
-    awaited (background generation can take minutes on first run).
+    awaited (background generation can take minutes on first run). An
+    unusable cache (unreadable file, missing schema) is a 503 so the
+    healthcheck fails loudly instead of every request 500ing.
     """
 
-    conn = store.connect()
     try:
-        years = store.cached_years(conn, GENERATOR_VERSION)
-    finally:
-        conn.close()
+        conn = store.connect()
+        try:
+            years = store.cached_years(conn, GENERATOR_VERSION)
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as exc:
+        raise HTTPException(503, f"cache is unusable: {exc}") from exc
     return {"status": "ok",
             "generator_version": GENERATOR_VERSION,
             "years": years}

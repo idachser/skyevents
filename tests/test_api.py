@@ -17,7 +17,8 @@ def cache(tmp_path, monkeypatch):
 
     path = str(tmp_path / "cache.db")
     monkeypatch.setenv("SKYEVENTS_CACHE", path)
-    conn = store.init(path)
+    store.init(path)
+    conn = store.connect(path)
     yield conn
     conn.close()
 
@@ -69,6 +70,32 @@ def test_health_with_empty_cache(cache):
 def test_health_reports_cached_years(cache):
     seed_2026(cache)
     assert client.get("/health").json()["years"] == [2026]
+
+
+def test_health_is_503_when_the_cache_is_unusable(tmp_path, monkeypatch):
+    """A corrupt cache must fail the healthcheck, not 500 per request."""
+
+    path = str(tmp_path / "cache.db")
+    with open(path, "w") as f:
+        f.write("this is not a sqlite database " * 30)
+    monkeypatch.setenv("SKYEVENTS_CACHE", path)
+
+    resp = client.get("/health")
+    assert resp.status_code == 503
+    assert "unusable" in resp.json()["detail"]
+
+
+def test_startup_survives_a_corrupt_cache(tmp_path, monkeypatch):
+    """lifespan logs and continues so /health can report the problem."""
+
+    path = str(tmp_path / "cache.db")
+    with open(path, "w") as f:
+        f.write("this is not a sqlite database " * 30)
+    monkeypatch.setenv("SKYEVENTS_CACHE", path)
+    monkeypatch.setenv("SKYEVENTS_AUTOGEN", "0")
+
+    with TestClient(app) as started:  # runs lifespan
+        assert started.get("/health").status_code == 503
 
 
 def test_events_in_window(cache):

@@ -42,36 +42,36 @@ def db_path() -> str:
 
 
 def connect(path: str | None = None) -> sqlite3.Connection:
-    """Open the cache read-write-capable but without touching the file;
-    init() must have set up the schema once at startup."""
+    """Open the cache for reading; init() owns the file's setup."""
 
     conn = sqlite3.connect(path or db_path(), timeout=15)
-    try:
-        conn.execute("PRAGMA synchronous=NORMAL")
-    except sqlite3.OperationalError:
-        pass  # read-only cache: keep serving with default durability
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
-def init(path: str | None = None) -> sqlite3.Connection:
-    """One-time setup at startup: directory, WAL journal mode, schema.
+def init(path: str | None = None) -> None:
+    """Create the directory, schema and WAL journal mode if missing.
 
+    Runs at startup and again before every generation cycle, so a cache
+    deleted or swapped out at runtime is rebuilt without a restart.
     WAL keeps request threads reading while the background generator
-    rewrites a year in one long transaction. journal_mode persists in
-    the database file, so it is set (and its result checked) here
-    rather than on every per-request connect.
+    rewrites a year in one long transaction; journal_mode persists in
+    the file, so it is set (and its result checked) here rather than on
+    every per-request connect.
     """
 
     path = path or db_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     conn = connect(path)
-    mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
-    if mode != "wal":
-        logger.warning(
-            "journal_mode is %r, not wal: reads will block while the "
-            "cache regenerates", mode)
-    conn.executescript(SCHEMA)
-    return conn
+    try:
+        mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+        if mode != "wal":
+            logger.warning(
+                "journal_mode is %r, not wal: reads will block while the "
+                "cache regenerates", mode)
+        conn.executescript(SCHEMA)
+    finally:
+        conn.close()
 
 
 def replace_year(conn, year: int, version: int, events: list[Event]):
