@@ -82,6 +82,43 @@ def test_verified_instants():
             f"({delta:.1f} min off, tolerance {tol_minutes})")
 
 
+def test_conjunction_artifact_rejected():
+    """A planet behind the Sun must not manufacture stations.
+
+    Uranus's 2029 conjunction is near-exact (0.01° elongation), where
+    the light-deflection term in apparent() makes the longitude jitter
+    by arcminutes. Without the elongation floor the sign of the rate
+    flips repeatedly and Uranus gains four stations within 2.5 hours on
+    2029-06-04, on top of its two real ones.
+    """
+
+    uranus = [e for e in stations.generate(2029) if e.bodies[0] == "uranus"]
+
+    assert [(e.dt_utc.strftime("%Y-%m-%d"), e.params["direction"])
+            for e in uranus] == [("2029-02-16", "direct"),
+                                 ("2029-09-23", "retrograde")]
+
+
+def test_no_station_clusters():
+    """Consecutive stations of one planet are months apart, never hours.
+
+    The generic form of the artifact above: any numerical instability in
+    the rate shows up as a tight cluster, and does so in pairs that the
+    alternation check below cannot see.
+    """
+
+    for year in (2026, 2029):
+        by_body = {}
+        for event in stations.generate(year):
+            by_body.setdefault(event.bodies[0], []).append(event.dt_utc)
+        for body, times in by_body.items():
+            for earlier, later in zip(sorted(times), sorted(times)[1:]):
+                gap = (later - earlier).total_seconds() / 86400
+                assert gap >= 10, (
+                    f"{body} in {year}: stations {gap:.2f} days apart "
+                    f"({earlier}, {later})")
+
+
 def test_directions_alternate_per_planet():
     """A planet cannot station retrograde twice without turning back"""
 

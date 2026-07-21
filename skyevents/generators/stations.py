@@ -29,6 +29,16 @@ DELTA_DAYS = 0.05
 # stations bounds the coarse scan step every other planet inherits.
 STEP_DAYS = 4.0
 
+# A planet passing behind the Sun breaks the light-deflection term in
+# Skyfield's apparent(): at Uranus's near-exact 2029 conjunction (0.01°
+# elongation) the longitude jitters by arcminutes and the rate flips
+# sign repeatedly, manufacturing four false stations within 2.5 hours.
+# The corruption is confined to roughly 0.1°, while every genuine
+# station stands well clear of the Sun — an outer planet stations near
+# opposition, and the closest any Mercury station comes over 2025-2030
+# is 14.75° — so this floor drops the artifact and nothing real.
+MIN_SUN_ELONGATION_DEG = 1.0
+
 
 def _prograde(ctx, planet):
     """True while the planet's apparent ecliptic longitude is increasing"""
@@ -52,9 +62,14 @@ def generate(year: int) -> list[Event]:
 
     events = []
     for name in PLANETS:
-        times, prograde = find_discrete(
-            t0, t1, _prograde(ctx, ctx.planets[name]))
+        planet = ctx.planets[name]
+        times, prograde = find_discrete(t0, t1, _prograde(ctx, planet))
         for t, is_prograde in zip(times, prograde):
+            e = ctx.earth.at(t)
+            elongation = e.observe(planet).separation_from(
+                e.observe(ctx.sun)).degrees
+            if elongation < MIN_SUN_ELONGATION_DEG:
+                continue
             # find_discrete reports the value the function takes *after*
             # each transition: back to prograde is the direct station
             direction = "direct" if is_prograde else "retrograde"
