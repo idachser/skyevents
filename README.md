@@ -5,8 +5,8 @@ events (moon phases, seasons, close approaches, eclipses, meteor showers…)
 locally with [Skyfield](https://rhodesmill.org/skyfield/) and JPL DE440s
 ephemerides — no external data services — and serves them over an HTTP API.
 
-Built as the data source for [astro_bot](../astro_bot); see
-`PLAN_EVENTS_SERVICE.md` for the roadmap.
+Built as the data source for [astro_bot](../astro_bot); see `PLAN.md`
+for the roadmap.
 
 ## API
 
