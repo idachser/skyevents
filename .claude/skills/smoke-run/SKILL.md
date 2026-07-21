@@ -41,10 +41,11 @@ curl -s "http://127.0.0.1:$PORT/v1/events?from=2026-01-01&to=2026-12-31" \
 
 Check at least: **eclipses** (dates *and* kind — annular vs total vs
 partial), **solstices and equinoxes** (to the minute), one **major meteor
-shower** peak, and one **planetary opposition**. These are the ones with
-published values that are easy to confirm from memory or a reference.
+shower** peak, one **planetary opposition**, and one **retrograde
+station**. These are the ones with published values that are easy to
+confirm from memory or a reference.
 
-Known-good for 2026, verified 2026-07-20:
+Known-good for 2026, verified 2026-07-20 (stations 2026-07-21):
 
 | Event | Expected |
 |---|---|
@@ -55,9 +56,33 @@ Known-good for 2026, verified 2026-07-20:
 | June solstice | 2026-06-21 08:24 UTC |
 | Perseids peak | 2026-08-13 |
 | Jupiter at opposition | 2026-01-10 |
+| Saturn enters retrograde motion | 2026-07-26 (in-the-sky: 19:29 UTC) |
+| Stations in 2026, all planets | 16 |
 
 For other years, derive fresh reference values rather than assuming this
 table transfers.
+
+Stations are the generator most worth counting rather than eyeballing.
+A per-planet count that disagrees with the synodic period is the tell:
+numerical noise in the longitude rate arrives as *pairs* of spurious
+stations, so the retrograde/direct alternation still looks perfect. That
+is how the 2029 Uranus artifact (four false stations in 2.5 hours, at
+0.01° solar elongation) was found — and it was invisible to every other
+check.
+
+Per-planet counts per year, measured over 2025–2030. Anything outside
+these ranges is worth investigating; a planet whose synodic period just
+exceeds a year drops to one station in some years, which is normal.
+
+| Planet | Per year | Synodic |
+|---|---|---|
+| Mercury | 6–7 | 115.9 d |
+| Venus | 0–2 | 583.9 d |
+| Mars | 0–2 | 780.0 d |
+| Jupiter | 1–2 | 398.9 d |
+| Saturn | 1–2 | 378.1 d |
+| Uranus | 2 | 369.7 d |
+| Neptune | 2 | 367.5 d |
 
 ## Gotchas
 
