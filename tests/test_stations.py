@@ -12,8 +12,10 @@ from skyevents.model import EventType
 from tests.util import assert_unique_uids, ref_dt
 
 # every 2026 station, in order: (UTC date, body, direction). The dates
-# agree with published retrograde calendars once those are converted
-# out of US local time.
+# agree with published retrograde calendars once each is converted out
+# of whichever zone it renders in — astro-seek in US local time,
+# in-the-sky.org in Berlin time, where Saturn's "11 Dec" direct station
+# is our 2026-12-10 23:31 UTC.
 REFERENCE = [
     ("2026-02-04", "uranus", "direct"),
     ("2026-02-26", "mercury", "retrograde"),
@@ -55,8 +57,9 @@ def test_2026_matches_published_stations():
         assert event.bodies == [body]
         assert event.params["direction"] == direction
         # the UTC date, not just the instant: a station's uid is
-        # date-derived, and several 2026 stations fall within an hour of
-        # midnight, so a shift in the definition would silently re-id them
+        # date-derived, and three 2026 stations fall within an hour of
+        # midnight (venus 00:27, saturn 23:31, jupiter 00:56), so a
+        # shift in the definition would silently re-id them
         assert event.dt_utc.strftime("%Y-%m-%d") == date, (
             f"{body} {direction}: {event.dt_utc} vs published {date}")
     assert_unique_uids(events)
@@ -66,14 +69,16 @@ def test_verified_instants():
     events = stations.generate(2026)
 
     for text, body, direction, tol_minutes in VERIFIED_INSTANTS:
-        matches = [e for e in events if e.bodies == [body]
-                   and e.params["direction"] == direction
-                   and abs((e.dt_utc - ref_dt(text)).total_seconds())
-                   < 36 * 3600]
-        assert len(matches) == 1, f"no unique {body} {direction} near {text}"
-        delta = abs((matches[0].dt_utc - ref_dt(text)).total_seconds()) / 60
+        # nearest rather than a fixed search radius: a regression large
+        # enough to leave the radius would otherwise report "not found"
+        # and swallow the one number that identifies the cause
+        candidates = [e for e in events if e.bodies == [body]
+                      and e.params["direction"] == direction]
+        assert candidates, f"no {body} {direction} station in 2026 at all"
+        nearest = min(candidates, key=lambda e: abs(e.dt_utc - ref_dt(text)))
+        delta = abs((nearest.dt_utc - ref_dt(text)).total_seconds()) / 60
         assert delta <= tol_minutes, (
-            f"{body} {direction}: {matches[0].dt_utc} vs published {text} "
+            f"{body} {direction}: {nearest.dt_utc} vs published {text} "
             f"({delta:.1f} min off, tolerance {tol_minutes})")
 
 

@@ -11,7 +11,8 @@ projection onto the equator distorts a rate that is passing through
 zero. For the same reason the instant is intrinsically soft — aberration
 and the choice of equinox move it by tens of minutes each (apparent vs
 astrometric, equinox of date vs J2000, span roughly two hours for
-Saturn), which is why the tests allow hours rather than minutes. We take
+Saturn), so the tests allow 45 minutes against a source computing the
+instant differently and 5 against one computing it as we do. We take
 apparent longitude referred to the equinox of date, the classical
 definition and the closest match to the feed.
 """
@@ -44,7 +45,10 @@ def _prograde(ctx, planet):
 
 def generate(year: int) -> list[Event]:
     ctx = context()
-    t0, t1 = ctx.search_window(year, step_days=STEP_DAYS + DELTA_DAYS)
+    # find_discrete samples only within the window it is handed, so the
+    # sole reach past the edge is the central difference — no need for
+    # the full step the find_minima/find_maxima generators must reserve
+    t0, t1 = ctx.search_window(year, step_days=DELTA_DAYS)
 
     events = []
     for name in PLANETS:
