@@ -14,6 +14,7 @@ class EventType(StrEnum):
     LUNAR_ECLIPSE = "lunar_eclipse"
     SOLAR_ECLIPSE = "solar_eclipse"
     METEOR_SHOWER = "meteor_shower"
+    STATION = "station"
 
 
 # canonical body order: Sun, Moon, planets outward; anything else

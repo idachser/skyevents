@@ -81,6 +81,16 @@ SOLAR_ECLIPSES = {
     "partial": ("Partial solar eclipse", "Частное солнечное затмение"),
 }
 
+STATIONS_EN = {
+    "retrograde": "{} enters retrograde motion",
+    "direct": "{} ends retrograde motion",
+}
+
+STATIONS_RU = {
+    "retrograde": "{} переходит к попятному движению",
+    "direct": "{} возобновляет прямое движение",
+}
+
 SHOWERS_RU = {
     "quadrantids": "Квадрантиды",
     "gamma_ursae_minorids": "гамма-Урсе-Минориды",
@@ -192,6 +202,12 @@ def render(event: Event, lang: str) -> tuple[str, str]:
 
         case EventType.SOLAR_ECLIPSE:
             return SOLAR_ECLIPSES[params["kind"]][ru], ""
+
+        case EventType.STATION:
+            templates = STATIONS_RU if ru else STATIONS_EN
+            name = (BODIES_RU[event.bodies[0]][0] if ru
+                    else BODIES_EN[event.bodies[0]])
+            return templates[params["direction"]].format(name), ""
 
         case EventType.METEOR_SHOWER:
             zhr = params["zhr"]

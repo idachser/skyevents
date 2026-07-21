@@ -7,7 +7,8 @@ with code in this repository.
 
 HTTP API service that computes celestial events (moon phases, seasons,
 apsides, oppositions/conjunctions, elongations, close approaches,
-eclipses, meteor showers) with Skyfield + JPL DE440s ephemerides, offline.
+eclipses, meteor showers, retrograde stations) with Skyfield + JPL
+DE440s ephemerides, offline.
 It replaces the In-The-Sky.org iCal feed as the data source for the
 Telegram bot in the sibling `astro_bot` repository; the bot talks to this
 service over HTTP only. `PLAN_EVENTS_SERVICE.md` is the roadmap — keep its

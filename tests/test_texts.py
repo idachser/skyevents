@@ -53,6 +53,14 @@ SAMPLES = [
                    "solar_lon_deg": 140.0}),
      ("Perseids meteor shower", "ZHR around 100"),
      ("Метеорный поток Персеиды", "ZHR около 100")),
+    (Event.create(EventType.STATION, DT, ["saturn"],
+                  {"direction": "retrograde"}),
+     ("Saturn enters retrograde motion", ""),
+     ("Сатурн переходит к попятному движению", "")),
+    (Event.create(EventType.STATION, DT, ["mercury"],
+                  {"direction": "direct"}),
+     ("Mercury ends retrograde motion", ""),
+     ("Меркурий возобновляет прямое движение", "")),
 ]
 
 

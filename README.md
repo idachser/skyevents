@@ -121,11 +121,15 @@ programmatically. `url` is currently always empty.
 | `lunar_eclipse` | `moon` | `kind`: `penumbral`/`partial`/`total`; `umbral_magnitude`, `penumbral_magnitude` |
 | `solar_eclipse` | `sun`, `moon` | `kind`: `total`/`annular`/`partial`; `separation_deg`, `radius_ratio` |
 | `meteor_shower` | shower slug | `name`, `zhr`, `solar_lon_deg` |
+| `station` | planet | `direction`: `retrograde`/`direct` |
 
 Events are computed **geocentrically** — no observer location. For
 `solar_eclipse` the `kind` is the geocentric one and is approximate:
 hybrids sit on the total/annular boundary, and local circumstances vary
-by observer.
+by observer. A `station` instant is soft for the same kind of reason:
+the longitude rate is passing through zero there, so the choice of
+equinox and of apparent vs astrometric position moves it by tens of
+minutes — expect other sources to differ by up to an hour or so.
 
 ## Development
 
