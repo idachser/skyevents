@@ -61,6 +61,22 @@ SAMPLES = [
                   {"direction": "direct"}),
      ("Mercury ends retrograde motion", ""),
      ("Меркурий возобновляет прямое движение", "")),
+    (Event.create(EventType.ASTEROID_OPPOSITION, DT, ["vesta"],
+                  {"number": 4, "name": "Vesta", "magnitude": 6.5,
+                   "distance_au": 1.483, "elongation_deg": 168.1}),
+     ("Asteroid (4) Vesta at opposition", "Magnitude 6.5, 1.483 AU from Earth"),
+     ("Астероид (4) Веста в противостоянии",
+      "Блеск 6.5m, 1.483 а.е. от Земли")),
+    # an object with no Russian name falls back to the Latin one rather
+    # than breaking the render (the catalog outgrows ASTEROIDS_RU with
+    # every refresh of the elements)
+    (Event.create(EventType.ASTEROID_OPPOSITION, DT, ["cebriones"],
+                  {"number": 2363, "name": "Cebriones", "magnitude": 9.8,
+                   "distance_au": 1.7, "elongation_deg": 175.0}),
+     ("Asteroid (2363) Cebriones at opposition",
+      "Magnitude 9.8, 1.7 AU from Earth"),
+     ("Астероид (2363) Cebriones в противостоянии",
+      "Блеск 9.8m, 1.7 а.е. от Земли")),
 ]
 
 

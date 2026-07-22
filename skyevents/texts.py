@@ -133,6 +133,75 @@ SHOWERS_RU = {
 }
 
 
+# Minor planets bright enough to be published (see the generator's
+# magnitude cut). Unlike SHOWERS_RU this is looked up with .get(): the
+# catalog holds hundreds of objects and grows whenever the elements are
+# refreshed, and an unnamed newcomer must fall back to its Latin name,
+# not break rendering.
+ASTEROIDS_RU = {
+    "ceres": "Церера",
+    "pallas": "Паллада",
+    "juno": "Юнона",
+    "vesta": "Веста",
+    "astraea": "Астрея",
+    "hebe": "Геба",
+    "iris": "Ирида",
+    "flora": "Флора",
+    "metis": "Метида",
+    "hygiea": "Гигея",
+    "parthenope": "Партенопа",
+    "victoria": "Виктория",
+    "egeria": "Эгерия",
+    "irene": "Ирена",
+    "eunomia": "Эвномия",
+    "psyche": "Психея",
+    "melpomene": "Мельпомена",
+    "fortuna": "Фортуна",
+    "massalia": "Массалия",
+    "lutetia": "Лютеция",
+    "kalliope": "Каллиопа",
+    "thalia": "Талия",
+    "themis": "Фемида",
+    "proserpina": "Прозерпина",
+    "euterpe": "Эвтерпа",
+    "bellona": "Беллона",
+    "amphitrite": "Амфитрита",
+    "urania": "Урания",
+    "fides": "Фидес",
+    "laetitia": "Летиция",
+    "harmonia": "Гармония",
+    "daphne": "Дафна",
+    "isis": "Исида",
+    "ariadne": "Ариадна",
+    "nysa": "Ниса",
+    "eugenia": "Евгения",
+    "hestia": "Гестия",
+    "nemausa": "Немауса",
+    "ausonia": "Авзония",
+    "leto": "Лето",
+    "sappho": "Сафо",
+    "angelina": "Ангелина",
+    "panopaea": "Панопея",
+    "eurynome": "Евринома",
+    "alkmene": "Алкмена",
+    "julia": "Юлия",
+    "thyra": "Тира",
+    "antigone": "Антигона",
+    "vibilia": "Вибилия",
+    "nausikaa": "Навсикая",
+    "kleopatra": "Клеопатра",
+    "athamantis": "Атамантида",
+    "desiderata": "Дезидерата",
+    "anahita": "Анахита",
+    "bamberga": "Бамберга",
+    "dembowska": "Дембовска",
+    "eleonora": "Элеонора",
+    "papagena": "Папагена",
+    "herculina": "Геркулина",
+    "interamnia": "Интерамния",
+}
+
+
 def _km(value: float) -> str:
     return f"{value:,.0f}".replace(",", " ")
 
@@ -208,6 +277,16 @@ def render(event: Event, lang: str) -> tuple[str, str]:
             name = (BODIES_RU[event.bodies[0]][0] if ru
                     else BODIES_EN[event.bodies[0]])
             return templates[params["direction"]].format(name), ""
+
+        case EventType.ASTEROID_OPPOSITION:
+            number, magnitude = params["number"], params["magnitude"]
+            distance = params["distance_au"]
+            if ru:
+                name = ASTEROIDS_RU.get(event.bodies[0], params["name"])
+                return (f"Астероид ({number}) {name} в противостоянии",
+                        f"Блеск {magnitude}m, {distance} а.е. от Земли")
+            return (f"Asteroid ({number}) {params['name']} at opposition",
+                    f"Magnitude {magnitude}, {distance} AU from Earth")
 
         case EventType.METEOR_SHOWER:
             zhr = params["zhr"]

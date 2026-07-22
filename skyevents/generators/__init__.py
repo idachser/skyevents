@@ -1,6 +1,7 @@
 """Event generators, one module per event type"""
 
 from skyevents.generators import (
+    asteroids,
     close_approaches,
     elongations,
     lunar_apsides,
@@ -17,11 +18,11 @@ from skyevents.model import Event
 # Bump to force cache regeneration when generator logic or thresholds
 # change. Lives in the cache only — never in event uids, which must
 # stay determined by the event identity alone.
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 
 MODULES = (moon_phases, seasons, lunar_apsides, planet_sun, elongations,
            close_approaches, lunar_eclipses, solar_eclipses, meteor_showers,
-           stations)
+           stations, asteroids)
 
 
 def generate_year(year: int) -> list[Event]:

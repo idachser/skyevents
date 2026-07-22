@@ -31,6 +31,11 @@ uv run ruff check skyevents tests  # lint
   (default `data/`, gitignored); DE440s downloads there on first use.
 - `skyevents/generators/` — one module per event type, each exposing
   `generate(year) -> list[Event]`. Events are computed geocentrically.
+- `skyevents/mpc.py` + `skyevents/generators/asteroids.dat` — minor
+  planet elements in MPCORB format, committed so the service stays
+  offline. They age (two-body propagation): refresh with the pipe in
+  `README.md` when `test_catalog_is_fresh` fails, and bump
+  `GENERATOR_VERSION`.
 - Events carry numeric params, not prose; user-facing texts (en/ru) are
   rendered from templates by event type (plan stage 3).
 - API contract (plan stage 4): versioned paths (`/v1/…`), explicit cache

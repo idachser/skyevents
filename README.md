@@ -3,7 +3,8 @@
 Celestial events computation service: calculates upcoming astronomical
 events (moon phases, seasons, close approaches, eclipses, meteor showers…)
 locally with [Skyfield](https://rhodesmill.org/skyfield/) and JPL DE440s
-ephemerides — no external data services — and serves them over an HTTP API.
+ephemerides — no data service is called at runtime — and serves them over
+an HTTP API.
 
 Built as the data source for [astro_bot](../astro_bot); see `PLAN.md`
 for the roadmap.
@@ -122,6 +123,7 @@ programmatically. `url` is currently always empty.
 | `solar_eclipse` | `sun`, `moon` | `kind`: `total`/`annular`/`partial`; `separation_deg`, `radius_ratio` |
 | `meteor_shower` | shower slug | `name`, `zhr`, `solar_lon_deg` |
 | `station` | planet | `direction`: `retrograde`/`direct` |
+| `asteroid_opposition` | asteroid slug | `number`, `name`, `magnitude`, `distance_au`, `elongation_deg` |
 
 Events are computed **geocentrically** — no observer location. For
 `solar_eclipse` the `kind` is the geocentric one and is approximate:
@@ -130,6 +132,19 @@ by observer. A `station` instant is soft for the same kind of reason:
 the longitude rate is passing through zero there, so the choice of
 equinox and of apparent vs astrometric position moves it by tens of
 minutes — expect other sources to differ by up to an hour or so.
+
+`asteroid_opposition` is the moment of **greatest solar elongation**,
+which for an inclined orbit is not the same as the opposition in
+ecliptic longitude that `planet_sun` reports for the planets — the two
+are 2.4 days apart for Pallas. Only oppositions brighter than magnitude
+10 are published, computed in the IAU H–G system. Minor-planet
+positions come from two-body propagation of orbital elements from the
+[Minor Planet Center](https://www.minorplanetcenter.net/), committed in
+`skyevents/generators/asteroids.dat` (numbered objects with H ≤ 8.6);
+they are good to arcminutes, so an instant can differ from an
+integrated ephemeris by an hour or so. Near-Earth asteroids are outside
+the catalog: they are too faint by H, and two-body elements would serve
+them badly anyway.
 
 ## Development
 
@@ -141,3 +156,16 @@ uv run ruff check skyevents tests
 
 The DE440s ephemeris (~32 MB) is downloaded on first use into `data/`
 (override with the `SKYEVENTS_DATA` env variable).
+
+The asteroid elements are committed, not downloaded, and go stale as
+two-body propagation drifts from their epoch — `test_catalog_is_fresh`
+fails once they are three years old. Refresh them (numbered minor
+planets come first in MPCORB, so a range request is enough — the full
+file is ~250 MB):
+
+```bash
+curl -s -r 0-500000 https://www.minorplanetcenter.net/iau/MPCORB/MPCORB.DAT \
+  | uv run python -m skyevents.mpc > skyevents/generators/asteroids.dat
+```
+
+Bump `GENERATOR_VERSION` afterwards so deployed caches regenerate.
