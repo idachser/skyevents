@@ -41,11 +41,13 @@ curl -s "http://127.0.0.1:$PORT/v1/events?from=2026-01-01&to=2026-12-31" \
 
 Check at least: **eclipses** (dates *and* kind — annular vs total vs
 partial), **solstices and equinoxes** (to the minute), one **major meteor
-shower** peak, one **planetary opposition**, and one **retrograde
-station**. These are the ones with published values that are easy to
-confirm from memory or a reference.
+shower** peak, one **planetary opposition**, one **retrograde
+station**, and one **asteroid opposition** (date *and* magnitude — the
+magnitude is what the publication cut runs on). These are the ones with
+published values that are easy to confirm from memory or a reference.
 
-Known-good for 2026, verified 2026-07-20 (stations 2026-07-21):
+Known-good for 2026, verified 2026-07-20 (stations 2026-07-21,
+asteroids 2026-07-22):
 
 | Event | Expected |
 |---|---|
@@ -58,6 +60,9 @@ Known-good for 2026, verified 2026-07-20 (stations 2026-07-21):
 | Jupiter at opposition | 2026-01-10 |
 | Saturn enters retrograde motion | 2026-07-26 (in-the-sky: 19:29 UTC) |
 | Stations in 2026, all planets | 16 |
+| Asteroid (4) Vesta at opposition | 2026-10-13, magnitude 6.5 |
+| Asteroid (2) Pallas at opposition | 2026-10-04, magnitude 8.2 |
+| Asteroid oppositions in 2026 | 16, every magnitude below 10.0 |
 
 For other years, derive fresh reference values rather than assuming this
 table transfers.

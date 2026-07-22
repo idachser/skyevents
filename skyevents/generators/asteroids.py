@@ -11,9 +11,10 @@ moment: closest, brightest, up all night.
 
 Only oppositions brighter than magnitude 10 are published. That cut is
 calibrated, not invented: the feed publishes Irene at 9.3 and Fides at
-9.5 but drops Parthenope at 10.0 and Nysa at 10.1, and it reproduces
-the feed's 2026-2027 composition apart from Eunomia (9.9 here, absent
-there) -- one borderline object, as with close approaches.
+9.5 but drops Parthenope at 10.0 and Nysa at 10.1. It reproduces the
+feed's 2027 composition exactly and adds two objects in 2026 (Eunomia
+9.9, Dembowska 9.8) -- borderline cases where the two magnitude models
+disagree in the last tenth, as with close approaches.
 
 Positions are two-body propagation of the committed MPCORB elements
 (see skyevents/mpc.py), so the catalog ages; tests/test_asteroids.py
@@ -49,7 +50,14 @@ def catalog() -> list[mpc.MinorPlanet]:
     # latin-1 rather than ascii: MPCORB is an ascii format, but one
     # stray byte in a name must not take down a whole year's generation
     with CATALOG.open(encoding="latin-1") as lines:
-        return mpc.parse(lines)
+        planets = mpc.parse(lines)
+    # individual bad rows are skipped with a warning, but a catalog
+    # that yields nothing is a broken deploy (an empty file from a
+    # failed refresh, a layout change), and must not pass for "no
+    # asteroid is bright this year"
+    if not planets:
+        raise ValueError(f"{CATALOG} holds no usable orbital elements")
+    return planets
 
 
 def apparent_magnitude(h: float, g: float, r_au: float, delta_au: float,
@@ -82,16 +90,21 @@ def generate(year: int) -> list[Event]:
             astrometric = ctx.earth.at(t).observe(body)
             delta = astrometric.distance().au
             r = ctx.sun.at(t).observe(body).distance().au
-            magnitude = apparent_magnitude(
+            # rounded before the cut, not after: the published tenth is
+            # what clients filter on, and an object stored as "10.0"
+            # would fail the "brighter than magnitude 10" contract the
+            # README states. A tenth is also finer than the H-G model
+            # is worth -- its own error runs to a few tenths.
+            magnitude = round(apparent_magnitude(
                 planet.magnitude_h, planet.slope_g, r, delta,
-                astrometric.phase_angle(ctx.sun).radians)
+                astrometric.phase_angle(ctx.sun).radians), 1)
             if magnitude >= MAX_MAGNITUDE:
                 continue
             events.append(Event.create(
                 EventType.ASTEROID_OPPOSITION, t.utc_datetime(),
                 [planet.slug],
                 {"number": planet.number, "name": planet.name,
-                 "magnitude": round(magnitude, 1),
+                 "magnitude": magnitude,
                  "distance_au": round(float(delta), 3),
                  "elongation_deg": round(float(elongation), 1)}))
     return sorted(events, key=lambda e: e.dt_utc)

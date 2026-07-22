@@ -8,6 +8,7 @@ sits within a tenth of ours, so borderline objects fall on either side
 1:1 assert_matches_reference the other generators use.
 """
 
+import io
 from datetime import date, timedelta
 from functools import cache
 
@@ -74,6 +75,10 @@ BORDERLINE_MAGNITUDE = 9.8
 # below is what keeps the tolerances above honest.
 MAX_CATALOG_AGE_DAYS = 3 * 365
 
+# real rows, for the parsing and refresh tests
+CATALOG_ROWS = [line for line in asteroids.CATALOG.read_text(
+    encoding="latin-1").splitlines() if not line.startswith("#")]
+
 
 @cache
 def generate(year: int):
@@ -137,10 +142,16 @@ def test_params_and_brightness():
 
 
 def test_only_bright_oppositions_published():
+    """The published tenth, not some unrounded value, is under the cut.
+
+    Rounding after the comparison would store "10.0" for an object that
+    squeaked through at 9.96, and a client re-filtering on the number
+    we gave it (README: "brighter than magnitude 10") would drop an
+    event we had just advertised.
+    """
+
     for event in generate(2026):
-        # the stored magnitude is rounded to a tenth for display, so an
-        # object that passed the cut at 9.96 is recorded as 10.0
-        assert event.params["magnitude"] <= asteroids.MAX_MAGNITUDE
+        assert event.params["magnitude"] < asteroids.MAX_MAGNITUDE
 
 
 def test_catalog_parses():
@@ -169,6 +180,61 @@ def test_catalog_is_fresh():
     assert age < timedelta(days=MAX_CATALOG_AGE_DAYS), (
         f"skyevents/generators/asteroids.dat holds elements for epoch "
         f"{epoch}, {age.days} days old; regenerate it (see README.md)")
+
+
+def test_bad_rows_are_skipped_not_raised():
+    """One unparsable row costs its object, not the whole year.
+
+    Generators run back to back in a single background pass, so raising
+    here would take moon phases and eclipses down with the asteroids.
+    """
+
+    good = CATALOG_ROWS[:3]
+
+    assert len(mpc.parse(good + ["garbage"] + CATALOG_ROWS[3:5])) == 5
+    # truncated mid-line by a range request: the name would be chopped
+    # and the uid would silently change, so the row must not parse
+    assert len(mpc.parse(good + [good[0][:192]])) == 3
+    assert len(mpc.parse(good + [good[0][:8] + "     " + good[0][13:]])) == 3
+
+
+def test_empty_catalog_is_an_error(tmp_path, monkeypatch):
+    """...but a catalog that yields nothing must be loud.
+
+    An empty file from a botched refresh would otherwise read as "no
+    asteroid is bright this year", for every year.
+    """
+
+    empty = tmp_path / "asteroids.dat"
+    empty.write_text("# a header and nothing else\n")
+    monkeypatch.setattr(asteroids, "CATALOG", empty)
+
+    with pytest.raises(ValueError):
+        asteroids.catalog.__wrapped__()  # uncached: leave the real one loaded
+
+
+def test_refresh_refuses_a_short_download(tmp_path, monkeypatch):
+    """A cut-short download leaves the committed catalog untouched"""
+
+    target = tmp_path / "asteroids.dat"
+    target.write_text("previous catalog")
+    monkeypatch.setattr("sys.stdin", io.StringIO("".join(CATALOG_ROWS[:5])))
+
+    with pytest.raises(SystemExit):
+        mpc._main([str(target)])
+
+    assert target.read_text() == "previous catalog"
+
+
+def test_refresh_skips_rows_it_cannot_use():
+    """Blank magnitudes and truncated lines drop out of the selection"""
+
+    row = CATALOG_ROWS[0]
+
+    assert mpc.select([row]) == [row]
+    assert mpc.select([row[:8] + "     " + row[13:]]) == []
+    assert mpc.select([row[:192]]) == []
+    assert mpc.select([]) == []
 
 
 def test_unpack_epoch():

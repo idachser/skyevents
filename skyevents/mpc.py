@@ -14,15 +14,18 @@ built exactly as `mpc.mpcorb_orbit` builds it. That means the private
 `_KeplerOrbit`: skyfield is pinned in the lockfile, and the reference
 oppositions in the tests fail loudly if an upgrade ever changes it.
 
-Run as a module (`python -m skyevents.mpc`), this filters MPCORB.DAT on
-stdin down to the committed catalog; see README.md for the full pipe.
+Run as a module (`python -m skyevents.mpc <path>`), this filters
+MPCORB.DAT on stdin down to the committed catalog; see README.md for
+the full pipe.
 """
 
+import logging
 import re
 import sys
 import unicodedata
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 from skyfield.constants import GM_SUN_Pitjeva_2005_km3_s2 as GM_SUN
 from skyfield.data.spice import inertial_frames
@@ -34,7 +37,19 @@ MPCORB_URL = "https://www.minorplanetcenter.net/iau/MPCORB/MPCORB.DAT"
 # best opposition, so everything the generator can publish is inside.
 MAX_H = 8.6
 
+# A refresh that yields fewer rows than this did not really work: the
+# download was cut short, or the columns moved. Today's catalog holds
+# 242, and the count only grows as MPC refines magnitudes.
+MIN_CATALOG_SIZE = 200
+
+# The last column we read ends at 194; a line shorter than that has
+# been truncated (a range request cuts the file mid-line) and would
+# parse into a chopped name -- a different slug, a different uid.
+LINE_LENGTH = 194
+
 DESIGNATION_RE = re.compile(r"\((\d+)\)\s+(.+)")
+
+logger = logging.getLogger("skyevents")
 
 
 @dataclass(frozen=True)
@@ -82,32 +97,54 @@ def unpack_epoch(packed: str) -> date:
 
 
 def parse(lines) -> list[MinorPlanet]:
-    """Parse MPCORB lines; blank and '#' comment lines are skipped"""
+    """Parse MPCORB lines; blank and '#' comment lines are skipped.
 
-    planets = []
+    An unparsable line is skipped with a warning rather than raised on:
+    generators run one after another inside a single background pass,
+    so a hard failure here would cost the whole year -- eclipses, moon
+    phases and all -- over one bad row. Wholesale failure still has to
+    be loud, and that is the caller's business (see the generator,
+    which refuses an empty catalog).
+    """
+
+    planets, skipped = [], []
     for line in lines:
         line = line.rstrip("\n")
         if not line.strip() or line.startswith("#"):
             continue
-        match = DESIGNATION_RE.match(line[166:194].strip())
+        match = (DESIGNATION_RE.match(line[166:194].strip())
+                 if len(line) >= LINE_LENGTH else None)
         if match is None:
-            raise ValueError(f"not a numbered minor planet: {line[:40]!r}")
+            skipped.append(line[:20])
+            continue
         number, name = int(match.group(1)), match.group(2)
+        try:
+            fields = _elements(line)
+        except ValueError:
+            skipped.append(line[:20])
+            continue
         planets.append(MinorPlanet(
-            number=number,
-            name=name,
-            slug=slugify(name),
-            magnitude_h=float(line[8:13]),
-            slope_g=float(line[14:19]),
-            epoch=unpack_epoch(line[20:25]),
-            mean_anomaly_deg=float(line[26:35]),
-            argument_of_perihelion_deg=float(line[37:46]),
-            longitude_of_ascending_node_deg=float(line[48:57]),
-            inclination_deg=float(line[59:68]),
-            eccentricity=float(line[70:79]),
-            semimajor_axis_au=float(line[92:103]),
-        ))
+            number=number, name=name, slug=slugify(name), **fields))
+    if skipped:
+        logger.warning("minor planet catalog: skipped %d unparsable line(s): "
+                       "%s", len(skipped), skipped[:3])
     return planets
+
+
+def _elements(line: str) -> dict:
+    """The MPCORB columns we read; ValueError if any of them is blank"""
+
+    return dict(
+        magnitude_h=float(line[8:13]),
+        slope_g=float(line[14:19]),
+        epoch=unpack_epoch(line[20:25]),
+        mean_anomaly_deg=float(line[26:35]),
+        argument_of_perihelion_deg=float(line[37:46]),
+        longitude_of_ascending_node_deg=float(line[48:57]),
+        inclination_deg=float(line[59:68]),
+        eccentricity=float(line[70:79]),
+        semimajor_axis_au=float(line[92:103]),
+    )
 
 
 def orbit(planet: MinorPlanet, ts):
@@ -137,26 +174,70 @@ def orbit(planet: MinorPlanet, ts):
     return kepler
 
 
-def _write_catalog(lines, out) -> None:
-    """Filter MPCORB lines down to the catalog; see README for the pipe"""
+def select(lines) -> list[str]:
+    """The catalog rows among MPCORB lines: numbered, H <= MAX_H"""
 
-    kept = [line.rstrip("\n") for line in lines
-            if len(line) > 190 and line[:5].isdigit()
-            and float(line[8:13]) <= MAX_H]
-    epoch = unpack_epoch(kept[0][20:25]) if kept else "?"
-    print(f"# Orbital elements in MPCORB format: the {len(kept)} numbered\n"
-          f"# minor planets with H <= {MAX_H} among numbers "
-          f"{int(kept[0][:5])}-{int(kept[-1][:5])} -- the prefix of\n"
-          f"# MPCORB.DAT that the pipe in README.md downloads. Every\n"
-          f"# object that can reach magnitude 10, the generator's\n"
-          f"# publication cut, is a low-numbered main-belt asteroid; out\n"
-          f"# beyond Jupiter it would take H < 2 to get there.\n"
-          f"# Source: {MPCORB_URL}\n"
-          f"# (Minor Planet Center), elements for epoch {epoch}.\n"
-          f"# Regenerate: see README.md.", file=out)
-    for line in kept:
-        print(line, file=out)
+    kept = []
+    for line in lines:
+        line = line.rstrip("\n")
+        if len(line) < LINE_LENGTH or not line[:5].isdigit():
+            continue
+        try:
+            magnitude_h = float(line[8:13])
+        except ValueError:
+            # MPCORB leaves H blank for objects without a measured
+            # magnitude; the generator could not rank them anyway
+            continue
+        if magnitude_h <= MAX_H:
+            kept.append(line)
+    return kept
+
+
+def render_catalog(kept: list[str]) -> str:
+    """The catalog file: a provenance header, then the rows"""
+
+    header = f"""\
+# Orbital elements in MPCORB format: the {len(kept)} numbered minor
+# planets with H <= {MAX_H} among numbers {int(kept[0][:5])}-{int(kept[-1][:5])}
+# -- the prefix of MPCORB.DAT that the pipe in README.md downloads.
+# Every object that can reach magnitude 10, the generator's publication
+# cut, is a low-numbered main-belt asteroid; out beyond Jupiter it
+# would take H < 2 to get there.
+# Source: {MPCORB_URL}
+# (Minor Planet Center), elements for epoch {unpack_epoch(kept[0][20:25])}.
+# Regenerate: see README.md.
+"""
+    return header + "".join(line + "\n" for line in kept)
+
+
+def _main(args: list[str]) -> None:
+    """Rewrite the catalog from MPCORB rows on stdin.
+
+    The destination is an argument, not a shell redirect: `> file`
+    truncates the committed catalog before this even runs, so a
+    download that fails or arrives truncated would destroy it. Here a
+    short read aborts and leaves the old file in place.
+    """
+
+    kept = select(sys.stdin)
+    if len(kept) < MIN_CATALOG_SIZE:
+        raise SystemExit(
+            f"only {len(kept)} usable MPCORB rows on stdin, expected at "
+            f"least {MIN_CATALOG_SIZE}: the download was cut short or the "
+            f"columns moved. Catalog left unchanged.")
+    text = render_catalog(kept)
+    if not args:
+        sys.stdout.write(text)
+        return
+    path = Path(args[0])
+    # write beside the target and rename: an interrupted write must not
+    # leave a half-catalog behind either
+    scratch = path.with_name(path.name + ".new")
+    scratch.write_text(text, encoding="latin-1")
+    scratch.replace(path)
+    print(f"{path}: {len(kept)} objects, epoch "
+          f"{unpack_epoch(kept[0][20:25])}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    _write_catalog(sys.stdin, sys.stdout)
+    _main(sys.argv[1:])

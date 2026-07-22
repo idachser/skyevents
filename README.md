@@ -165,7 +165,12 @@ file is ~250 MB):
 
 ```bash
 curl -s -r 0-500000 https://www.minorplanetcenter.net/iau/MPCORB/MPCORB.DAT \
-  | uv run python -m skyevents.mpc > skyevents/generators/asteroids.dat
+  | uv run python -m skyevents.mpc skyevents/generators/asteroids.dat
 ```
+
+The destination is an argument rather than a `>` redirect on purpose:
+the shell would truncate the committed catalog before the command ran,
+so a download that failed or arrived short would destroy it. A short
+read aborts instead and leaves the file alone.
 
 Bump `GENERATOR_VERSION` afterwards so deployed caches regenerate.

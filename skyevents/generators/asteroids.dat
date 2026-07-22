@@ -1,9 +1,9 @@
-# Orbital elements in MPCORB format: the 242 numbered
-# minor planets with H <= 8.6 among numbers 1-2241 -- the prefix of
-# MPCORB.DAT that the pipe in README.md downloads. Every
-# object that can reach magnitude 10, the generator's
-# publication cut, is a low-numbered main-belt asteroid; out
-# beyond Jupiter it would take H < 2 to get there.
+# Orbital elements in MPCORB format: the 242 numbered minor
+# planets with H <= 8.6 among numbers 1-2241
+# -- the prefix of MPCORB.DAT that the pipe in README.md downloads.
+# Every object that can reach magnitude 10, the generator's publication
+# cut, is a low-numbered main-belt asteroid; out beyond Jupiter it
+# would take H < 2 to get there.
 # Source: https://www.minorplanetcenter.net/iau/MPCORB/MPCORB.DAT
 # (Minor Planet Center), elements for epoch 2026-06-09.
 # Regenerate: see README.md.
