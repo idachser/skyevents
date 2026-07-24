@@ -107,6 +107,17 @@ def test_replace_year_drops_stale_events(conn):
     assert store.cached_years(conn, 2) == [2026]
 
 
+def test_year_ages_reports_generated_at(conn):
+    before = datetime.now(timezone.utc)
+    store.replace_year(conn, 2026, 1, [make_event(3)])
+
+    ages = store.year_ages(conn, 1)
+    assert set(ages) == {2026}
+    assert ages[2026] >= before
+    # a different version does not show up
+    assert store.year_ages(conn, 2) == {}
+
+
 def test_drop_stale_versions(conn):
     store.replace_year(conn, 2025, 1, [make_event(3)])
     store.replace_year(conn, 2026, 2, [make_event(10)])

@@ -16,6 +16,9 @@ class EventType(StrEnum):
     METEOR_SHOWER = "meteor_shower"
     STATION = "station"
     ASTEROID_OPPOSITION = "asteroid_opposition"
+    COMET_PERIHELION = "comet_perihelion"
+    COMET_PERIGEE = "comet_perigee"
+    COMET_PEAK_BRIGHTNESS = "comet_peak_brightness"
 
 
 # canonical body order: Sun, Moon, planets outward; anything else

@@ -77,6 +77,41 @@ def test_generate_missing_fills_cache(cache):
     assert store.cached_years(cache, GENERATOR_VERSION) == years
 
 
+def test_generate_missing_regenerates_a_stale_year(cache):
+    """An aged record is rebuilt so newly-added comets reach the year.
+
+    The year is present and at the current version, but its record is
+    older than MAX_CACHE_AGE, so generate_missing must recompute it
+    rather than skip it as already cached.
+    """
+
+    from datetime import timedelta
+
+    from skyevents.api import generate_missing
+
+    year = datetime.now(timezone.utc).year
+    marker = Event.create(
+        EventType.MOON_PHASE,
+        datetime(year, 1, 1, 0, 0, tzinfo=timezone.utc),
+        ["moon"], {"phase": "new"})
+    store.replace_year(cache, year, GENERATOR_VERSION, [marker])
+    stale = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    with cache:
+        cache.execute("UPDATE years SET generated_at = ? WHERE year = ?",
+                      (stale, year))
+
+    generate_missing()
+
+    ages = store.year_ages(cache, GENERATOR_VERSION)
+    assert datetime.fromisoformat(stale) < ages[year], "record not refreshed"
+    uids = [e.uid for e in store.events_between(
+        cache,
+        datetime(year, 1, 1, tzinfo=timezone.utc),
+        datetime(year + 1, 1, 1, tzinfo=timezone.utc))]
+    assert marker.uid not in uids, "stale placeholder survived regeneration"
+    assert len(uids) > 1
+
+
 def test_health_with_empty_cache(cache):
     resp = client.get("/health")
     assert resp.status_code == 200

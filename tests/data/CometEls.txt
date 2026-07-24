@@ -1,0 +1,16 @@
+# CometEls.txt fixture for the offline comet tests -- a handful of
+# real MPC lines, not the full ~950-comet download. Kept small so
+# the suite stays fast; the production service fetches the real file
+# at runtime (see skyevents/comets.py). Chosen to exercise: bright
+# multi-event comets (10P/Tempel has perigee and peak on one day),
+# the C/ non-periodic form, split-comet fragment slugs (141P, -A, -D),
+# the 2P/Encke boundary artifact (perihelion 2027, no 2026 events),
+# and a faint object (460P) that the magnitude cut must drop.
+0002P         2027 02 10.2288  0.338640  0.847306  187.2857  334.0194   11.3479  20260723  11.5  6.0  2P/Encke                                                 MPC191592
+0010P         2026 08  2.1148  1.417738  0.537453  195.4678  117.7975   12.0273  20260723   5.0 10.0  10P/Tempel                                               MPEC 2026-O53
+0024P         2026 01  8.3418  1.184040  0.708195   58.4888   78.2698   11.5018  20260723   6.5 14.0  24P/Schaumasse                                           MPEC 2026-O09
+0141P         2026 04 22.9939  0.807449  0.735837  153.6525  241.7697   13.9600  20260723  12.0 12.0  141P/Machholz                                            MPC191605
+0141P      a  2026 04 23.3833  0.807513  0.735844  153.6425  241.7967   13.9527  20260723  12.0 12.0  141P-A/Machholz                                          MPEC 2015-KD9
+0141P      d  2026 05 18.6343  0.806954  0.736838  153.3526  242.0450   13.8448  20260723  12.0 12.0  141P-D/Machholz                                          MPC 37026
+    CK24E010  2026 01 20.7864  0.566096  1.000335  243.6258  108.0786   75.2311  20260723   7.0  4.0  C/2024 E1 (Wierzchos)                                    MPEC 2026-N12
+0460P         2026 09 21.5817  1.016469  0.664352  351.9231  180.5121   18.8998  20260723  21.0  4.0  460P/PANSTARRS                                           MPC191636

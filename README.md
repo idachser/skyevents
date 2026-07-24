@@ -124,6 +124,9 @@ programmatically. `url` is currently always empty.
 | `meteor_shower` | shower slug | `name`, `zhr`, `solar_lon_deg` |
 | `station` | planet | `direction`: `retrograde`/`direct` |
 | `asteroid_opposition` | asteroid slug | `number`, `name`, `magnitude`, `distance_au`, `elongation_deg` |
+| `comet_perihelion` | comet slug | `name`, `magnitude`, `distance_au`, `heliocentric_au` |
+| `comet_perigee` | comet slug | `name`, `magnitude`, `distance_au`, `heliocentric_au` |
+| `comet_peak_brightness` | comet slug | `name`, `magnitude`, `distance_au`, `heliocentric_au` |
 
 Events are computed **geocentrically** — no observer location. For
 `solar_eclipse` the `kind` is the geocentric one and is approximate:
@@ -145,6 +148,21 @@ they are good to arcminutes, so an instant can differ from an
 integrated ephemeris by an hour or so. Near-Earth asteroids are outside
 the catalog: they are too faint by H, and two-body elements would serve
 them badly anyway.
+
+The three `comet_*` types are emitted for a comet only if it gets
+**brighter than magnitude 12** in the year, computed with the MPC total
+magnitude law `m = g + 5·log₁₀Δ + 2.5·k·log₁₀r`. `comet_perihelion` is
+the perihelion time from the elements (no search); `comet_perigee` is
+the closest approach to Earth; `comet_peak_brightness` is the brightest
+instant — they are separate types, not one with a discriminant, because
+a comet's perigee and peak can fall on the same date and would otherwise
+share a date-only uid. All instants are soft, as for the asteroids.
+Unlike the asteroid elements, the comet catalog is **not committed**: it
+turns over constantly, so `CometEls.txt` is downloaded from the Minor
+Planet Center at runtime (at most weekly) into `SKYEVENTS_DATA`. With no
+local copy yet — offline, or the first minutes after a fresh start —
+there are simply no comet events, and an already-generated year is
+recomputed weekly so a newly-found comet still reaches it.
 
 ## Development
 

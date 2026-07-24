@@ -288,6 +288,32 @@ def render(event: Event, lang: str) -> tuple[str, str]:
             return (f"Asteroid ({number}) {params['name']} at opposition",
                     f"Magnitude {magnitude}, {distance} AU from Earth")
 
+        case (EventType.COMET_PERIHELION | EventType.COMET_PERIGEE
+              | EventType.COMET_PEAK_BRIGHTNESS):
+            # the readable designation ("10P/Tempel", "C/2025 A3
+            # (Tsuchinshan)") stands in both languages, as an unnamed
+            # asteroid's Latin name does -- there is no ru comet lexicon
+            name, magnitude = params["name"], params["magnitude"]
+            if event.type == EventType.COMET_PERIHELION:
+                distance = params["heliocentric_au"]
+                if ru:
+                    return (f"Комета {name} в перигелии",
+                            f"Блеск {magnitude}m, {distance} а.е. от Солнца")
+                return (f"Comet {name} at perihelion",
+                        f"Magnitude {magnitude}, {distance} AU from the Sun")
+            if event.type == EventType.COMET_PERIGEE:
+                distance = params["distance_au"]
+                if ru:
+                    return (f"Комета {name} в перигее",
+                            f"Блеск {magnitude}m, {distance} а.е. от Земли")
+                return (f"Comet {name} closest to Earth",
+                        f"Magnitude {magnitude}, {distance} AU from Earth")
+            if ru:
+                return (f"Комета {name} в максимуме блеска",
+                        f"Блеск {magnitude}m")
+            return (f"Comet {name} at peak brightness",
+                    f"Magnitude {magnitude}")
+
         case EventType.METEOR_SHOWER:
             zhr = params["zhr"]
             if ru:

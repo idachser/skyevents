@@ -77,6 +77,23 @@ SAMPLES = [
       "Magnitude 9.8, 1.7 AU from Earth"),
      ("Астероид (2363) Cebriones в противостоянии",
       "Блеск 9.8m, 1.7 а.е. от Земли")),
+    (Event.create(EventType.COMET_PERIHELION, DT, ["10p_tempel"],
+                  {"name": "10P/Tempel", "magnitude": 6.9,
+                   "distance_au": 0.415, "heliocentric_au": 1.418}),
+     ("Comet 10P/Tempel at perihelion",
+      "Magnitude 6.9, 1.418 AU from the Sun"),
+     ("Комета 10P/Tempel в перигелии", "Блеск 6.9m, 1.418 а.е. от Солнца")),
+    (Event.create(EventType.COMET_PERIGEE, DT, ["10p_tempel"],
+                  {"name": "10P/Tempel", "magnitude": 6.9,
+                   "distance_au": 0.414, "heliocentric_au": 1.418}),
+     ("Comet 10P/Tempel closest to Earth",
+      "Magnitude 6.9, 0.414 AU from Earth"),
+     ("Комета 10P/Tempel в перигее", "Блеск 6.9m, 0.414 а.е. от Земли")),
+    (Event.create(EventType.COMET_PEAK_BRIGHTNESS, DT, ["c_2025_a3"],
+                  {"name": "C/2025 A3 (Tsuchinshan)", "magnitude": 8.0,
+                   "distance_au": 1.2, "heliocentric_au": 1.9}),
+     ("Comet C/2025 A3 (Tsuchinshan) at peak brightness", "Magnitude 8.0"),
+     ("Комета C/2025 A3 (Tsuchinshan) в максимуме блеска", "Блеск 8.0m")),
 ]
 
 

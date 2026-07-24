@@ -11,18 +11,24 @@ import logging
 import os
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from skyevents import store, texts
+from skyevents import comets, store, texts
 from skyevents.generators import GENERATOR_VERSION, generate_year
 from skyevents.model import Event, EventType
 
 MAX_WINDOW_DAYS = 400
 REFRESH_INTERVAL_S = 6 * 3600
+
+# Regenerate a cached year once its record is this old even if nothing
+# else changed: the comet catalog turns over on its own weekly schedule,
+# so a year has to be recomputed periodically to pick up comets found
+# after it was last generated (see generate_missing).
+MAX_CACHE_AGE = timedelta(days=7)
 
 # Sanity bounds on a requested year, not the ephemeris limits (generators
 # raise for years outside DE440s coverage). They exist so an absurd year
@@ -73,11 +79,13 @@ def needed_years(today: date) -> list[int]:
 
 
 def generate_missing():
-    """Generate and cache the needed years not yet in the cache.
+    """Generate and cache the needed years not yet fresh in the cache.
 
-    A version bump makes the *needed* years "missing" again, so they
-    regenerate on next startup. Past years intentionally drop out of
-    coverage: the bot only announces upcoming events (see the plan).
+    A year is (re)generated when it is absent, when a version bump
+    orphaned it, or when its record has aged past MAX_CACHE_AGE -- that
+    last case lets a comet added to the catalog after generation reach an
+    already-cached year. Past years intentionally drop out of coverage:
+    the bot only announces upcoming events (see the plan).
 
     Re-runs init first: it is cheap, and it rebuilds the schema if the
     cache file was deleted or replaced while the service was running.
@@ -86,9 +94,11 @@ def generate_missing():
     store.init()
     conn = store.connect()
     try:
-        cached = set(store.cached_years(conn, GENERATOR_VERSION))
-        for year in needed_years(datetime.now(timezone.utc).date()):
-            if year in cached:
+        now = datetime.now(timezone.utc)
+        ages = store.year_ages(conn, GENERATOR_VERSION)
+        for year in needed_years(now.date()):
+            generated_at = ages.get(year)
+            if generated_at is not None and now - generated_at < MAX_CACHE_AGE:
                 continue
             logger.info("generating %d...", year)
             events = generate_year(year)
@@ -107,9 +117,18 @@ async def refresh_loop():
     Runs off the event loop thread: pairwise close-approach searches
     can take minutes on the full ephemeris, and /health must answer
     right after startup.
+
+    Each cycle first refreshes the comet catalog (throttled to weekly
+    inside refresh_catalog, so most cycles no-op). A download failure is
+    logged and swallowed -- the generator keeps using the previous copy,
+    or emits no comet events if there is none yet.
     """
 
     while True:
+        try:
+            await asyncio.to_thread(comets.refresh_catalog)
+        except Exception:
+            logger.exception("comet catalog refresh failed")
         try:
             await asyncio.to_thread(generate_missing)
         except Exception:
