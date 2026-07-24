@@ -42,6 +42,17 @@ REFRESH_INTERVAL_S = 7 * 24 * 3600
 # ~950 comets); keep the old copy rather than overwrite it with a stub.
 MIN_DOWNLOAD_BYTES = 50_000
 
+# ...and a body that is the right size but parses to far too few comets
+# is not the catalog either -- an HTML error page, a captive portal, a
+# CDN block. Validate the content, not just the length, before replacing
+# a good file. The real catalog holds ~950.
+MIN_COMETS = 200
+
+# The MPC's CDN answers a default urllib User-Agent with a 403 HTML page,
+# which is exactly the large-but-bogus body MIN_COMETS guards against;
+# identify ourselves so we get the file.
+USER_AGENT = "skyevents comet-catalog fetcher"
+
 logger = logging.getLogger("skyevents")
 
 
@@ -185,12 +196,20 @@ def refresh_catalog(force: bool = False) -> bool:
     if (not force and path.exists()
             and time.time() - path.stat().st_mtime < REFRESH_INTERVAL_S):
         return False
-    with urllib.request.urlopen(COMETELS_URL, timeout=60) as resp:
+    request = urllib.request.Request(
+        COMETELS_URL, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=60) as resp:
         data = resp.read()
     if len(data) < MIN_DOWNLOAD_BYTES:
         raise ValueError(
             f"CometEls.txt download was only {len(data)} bytes "
             f"(expected >= {MIN_DOWNLOAD_BYTES}); keeping the old copy")
+    parsed = parse(data.decode("latin-1").splitlines())
+    if len(parsed) < MIN_COMETS:
+        raise ValueError(
+            f"CometEls.txt download parsed to only {len(parsed)} comets "
+            f"(expected >= {MIN_COMETS}); it is probably not the catalog "
+            f"(an error page?) -- keeping the old copy")
     path.parent.mkdir(parents=True, exist_ok=True)
     scratch = path.with_name(path.name + ".new")
     scratch.write_bytes(data)

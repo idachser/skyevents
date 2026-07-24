@@ -54,19 +54,26 @@ def _apparent_magnitude(g: float, k: float, delta_au: float,
 
 
 def _brightest_possible(comet: comets.Comet) -> float:
-    """A floor on the comet's magnitude over its whole orbit.
+    """A floor on the comet's magnitude over its whole orbit, or -inf.
 
-    The brightest it can ever be is at perihelion (r = q) and the closest
-    the geometry allows (delta >= |q - 1|, the Earth near 1 AU). This can
-    only overstate the brightness, never understate it, so a comet whose
-    floor is fainter than the cut can be dropped without any ephemeris
-    search -- which is what keeps a full catalog's generation quick.
+    r >= q everywhere, and for q > 1 the comet stays outside the Earth's
+    orbit, so its geocentric distance is at least q - 1 (two points at
+    radii r >= q > 1 and ~1 AU are never closer than that). Both the
+    5*log(delta) and 2.5*k*log(r) terms are then genuinely bounded below,
+    so this can only overstate the brightness -- a comet whose floor is
+    fainter than the cut is dropped without any ephemeris search, which
+    is what keeps a full catalog's generation quick.
+
+    For q <= 1 that bound collapses: the comet can cross the 1 AU sphere,
+    so delta has no positive lower bound and no floor holds. Those few
+    are always searched rather than risk pruning a faint object that
+    turns bright on a close pass.
     """
 
     q = comet.perihelion_distance_au
-    delta_floor = max(abs(q - 1.0), 0.05)
-    return _apparent_magnitude(comet.magnitude_g, comet.slope_k,
-                               delta_floor, q)
+    if q <= 1.0:
+        return float("-inf")
+    return _apparent_magnitude(comet.magnitude_g, comet.slope_k, q - 1.0, q)
 
 
 def _measure(ctx, body, comet: comets.Comet, t):
@@ -108,41 +115,57 @@ def generate(year: int) -> list[Event]:
             continue
         body = ctx.sun + comets.orbit(comet, ctx.ts)
 
-        # brightness peak (magnitude minimum); padding drops boundary
-        # artifacts, so an in-year minimum is a real peak
+        # brightness minima (peaks) and geocentric-distance minima
+        # (perigees). The padding lets find_minima see a trend continue
+        # across a year edge instead of reporting the edge itself, so an
+        # in-year extremum is a real one.
         def magnitude(t, body=body, comet=comet):
-            delta, r, m = _measure(ctx, body, comet, t)
-            return m
+            return _measure(ctx, body, comet, t)[2]
         magnitude.step_days = STEP_DAYS
-        times, mags = find_minima(t0, t1, magnitude)
-        peaks = [(t, m) for t, m in dedupe_extrema(times, mags)
-                 if in_year(t)]
-        if not peaks:
-            continue
-        peak_t, peak_m = min(peaks, key=lambda tm: tm[1])
-        if round(peak_m, 1) >= MAX_MAGNITUDE:
-            continue
 
-        events.append(
-            _event(EventType.COMET_PEAK_BRIGHTNESS, peak_t, ctx, body, comet))
+        def distance(t, body=body):
+            return ctx.earth.at(t).observe(body).distance().au
+        distance.step_days = STEP_DAYS
+
+        ptimes, pmags = find_minima(t0, t1, magnitude)
+        peaks = [(t, m) for t, m in dedupe_extrema(ptimes, pmags)
+                 if in_year(t)]
+        dtimes, dists = find_minima(t0, t1, distance)
+        perigees = [(t, d) for t, d in dedupe_extrema(dtimes, dists)
+                    if in_year(t)]
+        perigee_t = min(perigees, key=lambda td: td[1])[0] if perigees else None
 
         # perihelion straight from the T element -- no search needed
         peri_t = ctx.ts.tt(comet.perihelion_year, comet.perihelion_month,
                            comet.perihelion_day)
-        if in_year(peri_t):
-            events.append(
-                _event(EventType.COMET_PERIHELION, peri_t, ctx, body, comet))
+        perihelion_t = peri_t if in_year(peri_t) else None
 
-        # perigee (geocentric-distance minimum), same padding trick
-        def distance(t, body=body):
-            return ctx.earth.at(t).observe(body).distance().au
-        distance.step_days = STEP_DAYS
-        dtimes, dists = find_minima(t0, t1, distance)
-        perigees = [(t, d) for t, d in dedupe_extrema(dtimes, dists)
-                    if in_year(t)]
-        if perigees:
-            perigee_t = min(perigees, key=lambda td: td[1])[0]
-            events.append(
-                _event(EventType.COMET_PERIGEE, perigee_t, ctx, body, comet))
+        # A comet counts for the year if it beats the cut at any of its
+        # in-year event instants -- not only at a brightness peak. When
+        # the peak sits just across a boundary (within PAD_DAYS) and only
+        # the perihelion or perigee falls inside, those events must still
+        # be emitted rather than the whole comet dropped.
+        candidates = [m for _, m in peaks]
+        if perihelion_t is not None:
+            candidates.append(_measure(ctx, body, comet, perihelion_t)[2])
+        if perigee_t is not None:
+            candidates.append(_measure(ctx, body, comet, perigee_t)[2])
+        if not candidates or round(min(candidates), 1) >= MAX_MAGNITUDE:
+            continue
+
+        # the peak-brightness event stays gated on its own magnitude: it
+        # names the brightest instant, so a sub-threshold "peak" would be
+        # a contradiction, even when the comet qualifies via its perigee
+        if peaks:
+            peak_t, peak_m = min(peaks, key=lambda tm: tm[1])
+            if round(peak_m, 1) < MAX_MAGNITUDE:
+                events.append(_event(
+                    EventType.COMET_PEAK_BRIGHTNESS, peak_t, ctx, body, comet))
+        if perihelion_t is not None:
+            events.append(_event(
+                EventType.COMET_PERIHELION, perihelion_t, ctx, body, comet))
+        if perigee_t is not None:
+            events.append(_event(
+                EventType.COMET_PERIGEE, perigee_t, ctx, body, comet))
 
     return sorted(events, key=lambda e: e.dt_utc)

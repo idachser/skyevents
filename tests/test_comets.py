@@ -56,9 +56,45 @@ def test_composition_2026():
     assert events == sorted(events, key=lambda e: e.dt_utc)
 
 
-def test_every_published_comet_is_brighter_than_the_cut():
-    for event in generate(2026):
-        assert event.params["magnitude"] < gen.MAX_MAGNITUDE
+def _comet(**overrides):
+    fields = dict(
+        designation="X", slug="x", magnitude_g=20.0, slope_k=4.0,
+        perihelion_year=2026, perihelion_month=1, perihelion_day=1.0,
+        perihelion_distance_au=0.5, eccentricity=1.0,
+        argument_of_perihelion_deg=0.0, longitude_of_ascending_node_deg=0.0,
+        inclination_deg=0.0)
+    fields.update(overrides)
+    return comets.Comet(**fields)
+
+
+def test_prefilter_never_prunes_a_possible_earth_crosser():
+    """q <= 1 comets can cross Earth's orbit, so no magnitude floor holds.
+
+    A faint (g = 20) comet that passes close to Earth can still turn
+    bright, so it must be searched rather than pruned on its perihelion
+    distance -- the floor would otherwise silently drop it.
+    """
+
+    from math import isinf
+
+    assert isinf(gen._brightest_possible(_comet(perihelion_distance_au=0.5)))
+    # a distant comet stays boundable and prunable
+    floor = gen._brightest_possible(_comet(perihelion_distance_au=3.0))
+    assert floor > gen.MAX_MAGNITUDE
+
+
+def test_peak_events_are_under_the_cut_and_every_comet_qualifies():
+    """The peak-brightness event names the brightest instant, so it must
+    beat the cut; perihelion and perigee events for a qualifying comet
+    may be fainter, but each published comet clears the cut somewhere.
+    """
+
+    for slug, types in by_slug(generate(2026)).items():
+        peak = types.get(EventType.COMET_PEAK_BRIGHTNESS)
+        if peak is not None:
+            assert peak.params["magnitude"] < gen.MAX_MAGNITUDE
+        brightest = min(e.params["magnitude"] for e in types.values())
+        assert brightest < gen.MAX_MAGNITUDE, f"{slug} never beats the cut"
 
 
 def test_known_magnitudes():
@@ -208,15 +244,20 @@ def test_refresh_is_throttled(tmp_path, monkeypatch):
     assert comets.refresh_catalog() is False
 
 
+# a real, parseable body large enough to clear both the size floor and
+# the comet-count floor (the fixture rows, repeated)
+VALID_DOWNLOAD = (("\n".join(FIXTURE_ROWS) + "\n") * 40).encode("latin-1")
+
+
 def test_refresh_downloads_and_replaces(tmp_path, monkeypatch):
     path = tmp_path / "CometEls.txt"
     monkeypatch.setattr(comets, "catalog_path", lambda: path)
-    payload = b"c" * (comets.MIN_DOWNLOAD_BYTES + 1)
+    assert len(VALID_DOWNLOAD) >= comets.MIN_DOWNLOAD_BYTES
     monkeypatch.setattr(comets.urllib.request, "urlopen",
-                        lambda *a, **k: FakeResponse(payload))
+                        lambda *a, **k: FakeResponse(VALID_DOWNLOAD))
 
     assert comets.refresh_catalog() is True
-    assert path.read_bytes() == payload
+    assert path.read_bytes() == VALID_DOWNLOAD
 
 
 def test_refresh_refuses_a_short_download(tmp_path, monkeypatch):
@@ -227,6 +268,27 @@ def test_refresh_refuses_a_short_download(tmp_path, monkeypatch):
     monkeypatch.setattr(comets, "catalog_path", lambda: path)
     monkeypatch.setattr(comets.urllib.request, "urlopen",
                         lambda *a, **k: FakeResponse(b"too short"))
+
+    with pytest.raises(ValueError):
+        comets.refresh_catalog(force=True)
+    assert path.read_bytes() == b"previous catalog"
+
+
+def test_refresh_rejects_a_non_catalog_body(tmp_path, monkeypatch):
+    """A large but bogus body (an HTML error page) must not overwrite.
+
+    It clears the byte-size floor yet parses to no comets; the previous
+    catalog has to survive, or a CDN hiccup would blank comet coverage
+    for a week (refresh is throttled).
+    """
+
+    path = tmp_path / "CometEls.txt"
+    path.write_bytes(b"previous catalog")
+    monkeypatch.setattr(comets, "catalog_path", lambda: path)
+    html = b"<html><body>403 Forbidden</body></html>\n" * 4000
+    assert len(html) >= comets.MIN_DOWNLOAD_BYTES
+    monkeypatch.setattr(comets.urllib.request, "urlopen",
+                        lambda *a, **k: FakeResponse(html))
 
     with pytest.raises(ValueError):
         comets.refresh_catalog(force=True)
