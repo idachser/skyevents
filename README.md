@@ -164,6 +164,36 @@ local copy yet — offline, or the first minutes after a fresh start —
 there are simply no comet events, and an already-generated year is
 recomputed weekly so a newly-found comet still reaches it.
 
+## Deployment
+
+The service ships as a container and runs on its own `docker-compose.yml`,
+deployed independently of [astro_bot](../astro_bot): a bot release never
+recreates this container, and vice versa. The two talk over a shared
+external Docker bridge — the API is **not** published to the host, only
+reachable inside the network as `http://skyevents:8000`.
+
+Create the network once on the host (shared with the bot's compose):
+
+```bash
+docker network create astronet
+```
+
+CI builds the image and pushes it to GHCR
+(`ghcr.io/idachser/skyevents:latest`); the server only pulls it:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+The event cache (`cache.db`) persists in the `skyevents-cache` volume;
+the DE440s ephemeris is baked into the image.
+
+Pushes to `main` are deployed automatically by GitHub Actions (lint +
+tests, push to GHCR, then `git pull` + `docker compose pull` + `up -d`
+on the server over SSH). Required repository secrets: `DEPLOY_HOST`,
+`DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH` (the checkout path of this
+repo on the server).
+
 ## Development
 
 ```bash

@@ -1,0 +1,32 @@
+# skyevents runs on its own compose, deployed independently of the bot:
+# a bot release never recreates this container (and vice versa), so the
+# event cache and any in-flight background generation survive it.
+#
+# The two containers talk over the external `astronet` bridge — create it
+# once on the host before the first `up`:
+#
+#     docker network create astronet
+#
+# The image is built and pushed to GHCR by CI; the server only pulls it,
+# so there is no build context here. No `ports:` — the API is reachable
+# only from inside `astronet`, as `http://skyevents:8000`.
+
+services:
+  skyevents:
+    image: ghcr.io/idachser/skyevents:latest
+    container_name: skyevents
+    restart: unless-stopped
+    pull_policy: always
+    volumes:
+      # cache.db (SKYEVENTS_CACHE=/data/cache.db); the ephemeris is baked
+      # into the image at /app/data and is not shadowed by this mount
+      - skyevents-cache:/data
+    networks:
+      - astronet
+
+volumes:
+  skyevents-cache:
+
+networks:
+  astronet:
+    external: true
